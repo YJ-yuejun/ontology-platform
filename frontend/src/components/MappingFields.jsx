@@ -1,4 +1,4 @@
-import { changeMappingType, mappingSourceKind, relationDefaultKey, resetMappingSource, selectMappingRelation, setMappingSourceField, sourceKindForLocation, sourceLocationLabel } from '../mappingForm';
+import { changeMappingType, isDirectMapping, mappingSourceKind, relationDefaultKey, resetMappingSource, selectMappingRelation, setMappingSourceField, sourceKindForLocation, sourceLocationLabel } from '../mappingForm';
 
 export function MappingTargetFields({ form, setForm, objects, links }) {
   const object = objects.find((item) => item.name === form.target_object_type);
@@ -42,7 +42,7 @@ export function MappingSourceFields({ form, setForm, sources, tables, objects, r
     </div>
     {form.mapping_type === 'property' ? <>
       <FieldPicker label="来源字段" value={form.source_field} columns={table?.columns} onChange={(value) => setForm((old) => ({ ...old, source_field: value,
-        source_key: property?.is_primary_key && ['直接映射', 'direct'].includes(old.map_way) && (!old.source_key || old.source_key === old.source_field) ? value : old.source_key }))} />
+        source_key: property?.is_primary_key && isDirectMapping(old.map_way) && (!old.source_key || old.source_key === old.source_field) ? value : old.source_key }))} />
       <div className="mapping-key-field"><FieldPicker label="主键" value={form.source_key} columns={table?.columns} required={form.design_status === '已确认'} onChange={(value) => setForm((old) => ({ ...old, source_key: value }))} placeholder="填写能定位该对象的来源业务主键" /><small>用于定位本体对象；不一定是当前映射的来源字段，也不一定是物理表主键。</small></div>
     </> : <>
       <label><span>来源字段</span><input required value={form.source_field || ''} onChange={(event) => setForm((old) => setMappingSourceField(old, event.target.value))} placeholder="如：TASK_ID/PIPE_ID" /></label>

@@ -108,7 +108,9 @@ export function DictionaryItems({ kind, onCreated, compact = false }) {
   </div>;
 }
 
-export function DictionaryField({ kind, label, value, onChange, required = false, valueMode = 'name', filter, emptyLabel = '请选择' }) {
+// valueMode 默认 code：字典项的名称是可改的显示文案，code 才是稳定引用。
+// 默认回写 name 会让"在下拉里重选同一个可见项"把 direct 静默写成"直接映射"。
+export function DictionaryField({ kind, label, value, onChange, required = false, valueMode = 'code', filter, emptyLabel = '请选择' }) {
   const { items, error } = useModelDictionary(kind);
   const [open, setOpen] = useState(false);
   const [host, setHost] = useState(null);

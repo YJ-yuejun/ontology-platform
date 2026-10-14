@@ -580,7 +580,7 @@ def _normalize_mapping_editor_payload(ontology_id: str, payload: Dict[str, Any])
     if mode not in {"link_table", "join"}:
         raise repo.ValidationError("关系关联方式无效")
     payload.update(target_object_type="", target_property="", mapping_type_display="关系映射",
-                   relation_field_bindings=normalized, relation_key_mode=mode, map_way="关联映射")
+                   relation_field_bindings=normalized, relation_key_mode=mode, map_way="link")
     if mode == "join":
         payload.update(source_key=fields[0], target_key=fields[1])
     else:
@@ -592,6 +592,11 @@ def _validate_data_mapping(ontology_id: str, payload: Dict[str, Any]) -> None:
     mapping_type = payload.get("mapping_type")
     if mapping_type not in {"property", "relation"}:
         raise repo.ValidationError("数据映射只能选择属性映射或关系映射")
+    # 映射方式一律落库为 dic_mapping_way 的 code。历史上前端写过中文名，
+    # 这里做一次归一化，避免再次把两套取值写进同一列。
+    way = payload.get("map_way")
+    if isinstance(way, str) and way in repo.MAPPING_WAY_CODES:
+        payload["map_way"] = repo.MAPPING_WAY_CODES[way]
     if payload.get("binding_mode") == "governed":
         asset_code = payload.get("governance_asset_code")
         if not asset_code:
@@ -960,7 +965,7 @@ def validate_data_mapping(ontology_id: str, resource_id: str) -> Dict[str, Any]:
         for key in keys:
             check("主键/关联键", "ok" if key.lower() in known else "error",
                   key if key.lower() in known else f"来源表中不存在 {key}")
-    if mapping.get("map_way") in {"expression", "lookup"} and not (mapping.get("transform_rule") or mapping.get("lookup_dictionary")):
+    if mapping.get("map_way") in {"expr", "enum_map"} and not (mapping.get("transform_rule") or mapping.get("lookup_dictionary")):
         check("转换配置", "warning", "转换方式已选择，但表达式或字典尚未配置")
     if not mapping.get("update_method"):
         check("更新方式", "pending", "尚未定义更新要求；二期不执行同步")
@@ -2221,7 +2226,7 @@ def _import_pipeline_template_v20(oid: str) -> bool:
             target_relation = relation_api_by_name.get(relation_display, "passes_through")
         if raw["来源系统"] not in source_name_to_code:
             raise repo.ValidationError(f"映射 {raw['映射ID']} 的来源系统“{raw['来源系统']}”未在06_数据源中匹配")
-        payload = {"template_external_id": raw["映射ID"], "template_sheet": "07_数据映射", "template_row": row_number, "template_raw": raw, "mapping_type": mapping_type, "mapping_type_display": raw["映射类型"], "source_code": source_name_to_code[raw["来源系统"]], "source_system_display": raw["来源系统"], "source_table": raw["来源表/接口"], "source_field": raw["来源字段"], "source_key": raw["主键/关联键"], "target_object_type": target_api, "target_property": target_property, "target_relation": target_relation, "target_key": raw["主键/关联键"], "map_way": raw["映射方式"], "transform_rule": raw["转换规则"], "quality_rule": raw["质量校验"], "update_method": "realtime" if "实时" in raw["更新方式"] else "batch", "update_method_display": raw["更新方式"], "owner": raw["负责人"], "design_status": raw["状态"]}
+        payload = {"template_external_id": raw["映射ID"], "template_sheet": "07_数据映射", "template_row": row_number, "template_raw": raw, "mapping_type": mapping_type, "mapping_type_display": raw["映射类型"], "source_code": source_name_to_code[raw["来源系统"]], "source_system_display": raw["来源系统"], "source_table": raw["来源表/接口"], "source_field": raw["来源字段"], "source_key": raw["主键/关联键"], "target_object_type": target_api, "target_property": target_property, "target_relation": target_relation, "target_key": raw["主键/关联键"], "map_way": repo.MAPPING_WAY_CODES.get(raw["映射方式"], raw["映射方式"]), "transform_rule": raw["转换规则"], "quality_rule": raw["质量校验"], "update_method": "realtime" if "实时" in raw["更新方式"] else "batch", "update_method_display": raw["更新方式"], "owner": raw["负责人"], "design_status": raw["状态"]}
         save_resource(oid, "data-mappings", EnterpriseResourceBase(code=raw["映射ID"], name=f"{raw['本体对象/关系']} · {raw['本体属性']}", category=raw["映射类型"], status=_template_status(raw["状态"]), description="模板数据到本体资源的受治理映射", payload=payload))
         conn = repo.get_conn(); _link_template_record(conn, oid, "07_数据映射", row_number, "data_mapping", raw["映射ID"]); conn.commit(); conn.close()
 

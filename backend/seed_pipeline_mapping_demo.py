@@ -60,16 +60,16 @@ ASSETS = [
 # code, governed asset, governed field(s), semantic target, physical source,
 # original source location/field, mapping method, quality check.
 MAPPINGS = [
-    ("DEMO-MAP-001", "DEMO-GA-TASK", "TASK_ID", "TransportTask.taskId", "DS-001", "运输任务表", "TASK_ID", "直接映射", "非空+唯一"),
-    ("DEMO-MAP-002", "DEMO-GA-TASK", "STATUS", "TransportTask.status", "DS-001", "运输任务表", "STATUS", "枚举映射", "枚举合法"),
-    ("DEMO-MAP-003", "DEMO-GA-TASK", "PLAN_QTY", "TransportTask.plannedQuantity", "DS-001", "运输任务表", "PLAN_QTY", "字段/单位映射", "单位与范围核对"),
-    ("DEMO-MAP-004", "DEMO-GA-ROUTE", ("TASK_ID", "PIPE_ID"), "relation:passes_through", "DS-001", "任务线路明细", "TASK_ID/PIPE_ID", "关联映射", "两端对象均存在"),
-    ("DEMO-MAP-005", "DEMO-GA-MONITOR", "PRESSURE", "PipeSegment.pressure", "DS-002", "实时接口", "PRESSURE", "字段/单位映射", "范围与时间完整性"),
-    ("DEMO-MAP-006", "DEMO-GA-PIPELINE", "PIPE_ID", "Pipeline.pipelineId", "DS-003", "资产台账", "PIPE_ID", "直接映射", "非空+唯一"),
-    ("DEMO-MAP-007", "DEMO-GA-EQUIPMENT", "EQUIPMENT_ID", "Equipment.equipmentId", "DS-003", "资产台账", "EQUIPMENT_ID", "直接映射", "非空+唯一"),
-    ("DEMO-MAP-008", "DEMO-GA-EQUIPMENT", "STATUS", "Equipment.status", "DS-003", "资产台账", "STATUS", "枚举映射", "枚举合法"),
-    ("DEMO-MAP-009", "DEMO-GA-CONTRACT", "CONTRACT_ID", "Contract.contractId", "DS-004", "合同表/接口", "CONTRACT_ID", "直接映射", "非空+唯一"),
-    ("DEMO-MAP-010", "DEMO-GA-WORKORDER", "WORK_ORDER_ID", "WorkOrder.workOrderId", "DS-005", "工单接口", "WORK_ORDER_ID", "直接映射", "非空+唯一"),
+    ("DEMO-MAP-001", "DEMO-GA-TASK", "TASK_ID", "TransportTask.taskId", "DS-001", "运输任务表", "TASK_ID", "direct", "非空+唯一"),
+    ("DEMO-MAP-002", "DEMO-GA-TASK", "STATUS", "TransportTask.status", "DS-001", "运输任务表", "STATUS", "enum_map", "枚举合法"),
+    ("DEMO-MAP-003", "DEMO-GA-TASK", "PLAN_QTY", "TransportTask.plannedQuantity", "DS-001", "运输任务表", "PLAN_QTY", "unit", "单位与范围核对"),
+    ("DEMO-MAP-004", "DEMO-GA-ROUTE", ("TASK_ID", "PIPE_ID"), "relation:passes_through", "DS-001", "任务线路明细", "TASK_ID/PIPE_ID", "link", "两端对象均存在"),
+    ("DEMO-MAP-005", "DEMO-GA-MONITOR", "PRESSURE", "PipeSegment.pressure", "DS-002", "实时接口", "PRESSURE", "unit", "范围与时间完整性"),
+    ("DEMO-MAP-006", "DEMO-GA-PIPELINE", "PIPE_ID", "Pipeline.pipelineId", "DS-003", "资产台账", "PIPE_ID", "direct", "非空+唯一"),
+    ("DEMO-MAP-007", "DEMO-GA-EQUIPMENT", "EQUIPMENT_ID", "Equipment.equipmentId", "DS-003", "资产台账", "EQUIPMENT_ID", "direct", "非空+唯一"),
+    ("DEMO-MAP-008", "DEMO-GA-EQUIPMENT", "STATUS", "Equipment.status", "DS-003", "资产台账", "STATUS", "enum_map", "枚举合法"),
+    ("DEMO-MAP-009", "DEMO-GA-CONTRACT", "CONTRACT_ID", "Contract.contractId", "DS-004", "合同表/接口", "CONTRACT_ID", "direct", "非空+唯一"),
+    ("DEMO-MAP-010", "DEMO-GA-WORKORDER", "WORK_ORDER_ID", "WorkOrder.workOrderId", "DS-005", "工单接口", "WORK_ORDER_ID", "direct", "非空+唯一"),
 ]
 
 ASSET_KEYS = {

@@ -8,7 +8,7 @@ import ResourceHistoryLink from '../components/ResourceHistoryLink';
 import { EmptyState, ErrorState, Loading } from '../components/StateViews';
 import PaginationBar from '../components/PaginationBar';
 import { GovernedMappingFields, MappingTargetFields } from '../components/MappingFields';
-import { DictionaryField } from '../components/DictionaryManager';
+import { DictionaryField, useModelDictionary } from '../components/DictionaryManager';
 import { mappingKeyLabel, mappingSourceKind, mappingTargetPayload, sourceLocationLabel } from '../mappingForm';
 import { historyReturnUrl } from '../historyNavigation';
 import GovernanceAssets from './GovernanceAssets';
@@ -33,7 +33,7 @@ const emptySource = () => ({ code: '', name: '', category: '', status: 'draft', 
 const emptyMapping = () => ({ code: '', name: '', status: 'experimental', design_status: '设计中', owner: '', description: '', mapping_type: 'property',
   binding_mode: 'governed', governance_asset_code: '', governance_field: '', governance_relation_fields: ['', ''],
   source_code: '', source_kind: 'table', source_table: '', source_field: '', source_key: '', target_key: '',
-  target_object_type: '', target_property: '', target_relation: '', map_way: '直接映射',
+  target_object_type: '', target_property: '', target_relation: '', map_way: 'direct',
   transform_rule: '', lookup_dictionary: '', update_method: '', quality_rule: '' });
 function parseCsv(text) {
   const rows = []; let cell = ''; let row = []; let quoted = false;
@@ -117,6 +117,7 @@ export default function DataMappingStudio({ activeId, notify }) {
   const [validation, setValidation] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const { items: mappingWays } = useModelDictionary('mapping_way');
 
   const load = async () => {
     setError('');
@@ -228,7 +229,9 @@ export default function DataMappingStudio({ activeId, notify }) {
   const mappingSourceLabel = (item) => item.binding_mode === 'governed'
     ? assets.find((asset) => asset.code === item.governance_asset_code)?.name || item.governance_asset_code || '治理资产缺失'
     : sources?.find((source) => source.code === item.source_code)?.name || item.source_system_display || item.source_code || '—';
-  const mappingWayLabel = (item) => ({ direct: '直接映射', expression: '表达式转换', lookup: '字典关联' })[item.map_way] || item.map_way || '—';
+  // 映射方式一律按 dic_mapping_way 的 code 存储，显示名从字典取，
+  // 避免再出现 direct / 直接映射 / expression 三套词汇并存。
+  const mappingWayLabel = (item) => mappingWays.find((row) => row.code === item.map_way)?.name || item.map_way || '—';
   const mappingStatusLabel = (item) => item.design_status || ({ draft: '设计中', experimental: '设计中', active: '已确认', deprecated: '已停用' })[item.status] || '待确认';
   const mappingUpdateLabel = (item) => item.update_method_display || ({ realtime: '实时', event: '事件触发', batch: '批量', manual: '手工触发' })[item.update_method] || item.update_method || '—';
   useEffect(() => { setValidation(null); }, [selectedDetail?.item.id, activeTab]);
@@ -389,13 +392,15 @@ export default function DataMappingStudio({ activeId, notify }) {
     {editor && <Modal wide title={editor.kind === 'source' ? `${editor.item ? '编辑' : '登记'}数据源` : `${editor.item ? '编辑' : '新建'}数据映射`} onClose={() => setEditor(null)} footer={<><button className="btn secondary" onClick={() => setEditor(null)}>取消</button><button className="btn primary" form="mapping-v2-form" disabled={busy === 'save'}>{busy === 'save' ? '保存中…' : '保存到工作状态'}</button></>}>
       <form id="mapping-v2-form" className="form-sections" onSubmit={save}><div className="form-section"><h3>基本信息</h3><div className="form-grid two"><label><span>{editor.kind === 'source' ? '数据源ID' : '映射ID'}</span><input required disabled={Boolean(editor.item)} value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} /></label>{editor.kind === 'source' && <><label><span>系统名称</span><input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label><label><span>登记状态（平台）</span><select value={form.status || 'draft'} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="draft">草稿</option><option value="active">已启用</option><option value="deprecated">已停用</option>{form.status && !['draft', 'active', 'deprecated'].includes(form.status) && <option value={form.status}>{statusLabel(form.status)}（已有值）</option>}</select><small>仅表示数据源登记的使用状态，不是连接测试结果。</small></label></>}</div></div>
       {editor.kind === 'source' ? <><div className="form-section"><h3>来源登记（对应模板 06_数据源）</h3><p className="form-hint">按业务系统原始口径填写；“数据主题”不等于本体的“主题域”，连接参数也不是模板事实。</p><div className="form-grid two">
-        <DictionaryField kind="system_type" label="系统类型" required={!editor.item} value={form.system_type || ''} onChange={(value) => setForm({ ...form, system_type: value })} />
+        <DictionaryField kind="system_type" label="系统类型" required={!editor.item} value={form.system_type || ''} valueMode="name" onChange={(value) => setForm({ ...form, system_type: value })} />
         <label><span>数据库/接口/文件</span><input required={!editor.item} value={form.physical_object || ''} onChange={(event) => setForm({ ...form, physical_object: event.target.value })} placeholder="如：运输任务接口/表；不是连接地址" /></label>
         <label><span>数据主题</span><input required={!editor.item} value={form.data_subject || ''} onChange={(event) => setForm({ ...form, data_subject: event.target.value })} placeholder="如：压力、流量、状态" /></label>
         <label><span>更新频率</span><input required={!editor.item} list="source-update-frequencies" value={form.update_frequency || ''} onChange={(event) => setForm({ ...form, update_frequency: event.target.value })} /><datalist id="source-update-frequencies">{sourceOptions.update_frequency.map((value) => <option value={value} key={value} />)}</datalist></label>
         <label><span>数据范围</span><input required={!editor.item} value={form.data_scope || ''} onChange={(event) => setForm({ ...form, data_scope: event.target.value })} /></label>
-        <DictionaryField kind="data_category" label="数据类别" required={!editor.item} value={form.data_category || ''} onChange={(value) => setForm({ ...form, data_category: value })} />
-        <DictionaryField kind="interface_type" label="接口方式" required={!editor.item} value={form.interface_type || ''} onChange={(value) => setForm({ ...form, interface_type: value })} />
+        <DictionaryField kind="data_category" label="数据类别" required={!editor.item} value={form.data_category || ''} valueMode="name" onChange={(value) => setForm({ ...form, data_category: value })} />
+        {/* 系统类型/数据类别/接口方式仍按显示名存储：库里存在“主数据系统”“接口/数据库”等
+            字典外取值，收敛为 code 需要单独一次迁移，暂不随 map_way 一起改。 */}
+        <DictionaryField kind="interface_type" label="接口方式" required={!editor.item} value={form.interface_type || ''} valueMode="name" onChange={(value) => setForm({ ...form, interface_type: value })} />
       </div></div>
         <div className="form-section"><h3>数据库类型与结构获取</h3><p className="form-hint">数据库类型属于连接配置，不改变上面的模板字段。目前仅 MySQL 支持直连获取表结构；其余类型可登记并导入 CSV／JSON 数据字典。</p><div className="form-grid two">
           <label><span>数据库类型</span><select value={form.driver || ''} onChange={(event) => setForm({ ...form, driver: event.target.value, port: event.target.value === 'mysql' ? form.port || 3306 : '' })}><option value="">暂不指定</option>{databaseDrivers.map(([key, label]) => <option key={key} value={key}>{label}</option>)}{form.driver && !databaseDrivers.some(([key]) => key === form.driver) && <option value={form.driver}>{form.driver}（已有值）</option>}</select></label>
@@ -413,7 +418,7 @@ export default function DataMappingStudio({ activeId, notify }) {
           <GovernedMappingFields form={form} setForm={setForm} assets={assets} />
           {!assets.some((item) => item.verification_status === 'confirmed') && <div className="mapping-layer-warning">当前没有已确认治理资产。<button type="button" onClick={() => { setEditor(null); setActiveTab('assets'); }}>先登记并确认治理资产</button></div>}
           {editor.item && !editor.item.binding_mode && <p className="mapping-layer-note">旧映射原值：{mappingSourceLabel(editor.item)} / {editor.item.source_table || '—'} / {editor.item.source_field || '—'}。这些字段只作溯源，不作为新映射的运行来源。</p>}
-        </div></section><section className="form-section"><h3>转换与质量</h3><div className="form-grid two">{form.mapping_type === 'property' ? <DictionaryField kind="mapping_way" label="映射方式" value={form.map_way} onChange={(value) => setForm({ ...form, map_way: value })} /> : <label><span>映射方式</span><select value={form.map_way || '关联映射'} onChange={(event) => setForm({ ...form, map_way: event.target.value })}><option>关联映射</option>{form.map_way && form.map_way !== '关联映射' && <option>{form.map_way}（已有值）</option>}</select><small>V4 映射方式字典尚无“关联映射”代码，关系映射暂保留模板原值。</small></label>}
+        </div></section><section className="form-section"><h3>转换与质量</h3><div className="form-grid two">{form.mapping_type === 'property' ? <DictionaryField kind="mapping_way" label="映射方式" value={form.map_way} onChange={(value) => setForm({ ...form, map_way: value })} /> : <label><span>映射方式</span><select value={form.map_way || 'link'} onChange={(event) => setForm({ ...form, map_way: event.target.value })}><option value="link">关联映射</option></select><small>关系映射固定使用“关联映射”（dic_mapping_way · link）。</small></label>}
           <label><span>转换规则</span><input value={form.transform_rule || ''} onChange={(event) => setForm({ ...form, transform_rule: event.target.value })} placeholder="无转换可填 -" /></label>
           <label><span>质量校验</span><input value={form.quality_rule || ''} onChange={(event) => setForm({ ...form, quality_rule: event.target.value })} placeholder="如：非空+唯一" /></label>
           <label><span>更新方式</span><select value={form.update_method || ''} onChange={(event) => setForm({ ...form, update_method: event.target.value })}><option value="">待确定</option><option value="realtime">实时</option><option value="event">事件触发</option><option value="batch">批量</option><option value="manual">手工触发</option></select></label>

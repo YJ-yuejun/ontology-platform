@@ -61,10 +61,10 @@ test('type and source changes cannot retain stale relation keys or targets', () 
   assert.equal(property.source_key, '');
   for (const key of ['source_table', 'source_field', 'transform_rule', 'quality_rule']) assert.equal(property[key], '');
   for (const key of ['code', 'owner', 'update_method', 'source_code']) assert.equal(property[key], relationForm[key]);
-  assert.equal(property.map_way, '直接映射');
+  assert.equal(property.map_way, 'direct');
   assert.equal(property.design_status, '设计中');
   assert.equal(changeMappingType({ ...property, target_object_type: 'Task', target_property: 'status' }, 'relation').target_property, '');
-  assert.equal(changeMappingType(property, 'relation').map_way, '关联映射');
+  assert.equal(changeMappingType(property, 'relation').map_way, 'link');
   assert.deepEqual(property.relation_field_bindings, []);
   assert.equal(property.source_kind, 'table');
   assert.equal(resetMappingSource(relationForm, { source_table: 'new' }).target_key, '');
@@ -83,7 +83,7 @@ test('existing cross-table joins preserve both keys and do not become composite-
 test('object identity never defaults to the mapped non-key field or an unrelated table PK', () => {
   const form = { mapping_type: 'property', target_object_type: 'Task', target_property: 'status', source_code: 'DS-001', source_table: '任务表', source_field: 'STATUS' };
   assert.equal(suggestObjectKey(form, objects[0], []), '');
-  const known = { ...form, target_property: 'taskId', source_field: 'TASK_ID', map_way: '直接映射' };
+  const known = { ...form, target_property: 'taskId', source_field: 'TASK_ID', map_way: 'direct' };
   assert.equal(suggestObjectKey(form, objects[0], [known]), 'TASK_ID');
   assert.equal(suggestObjectKey({ ...form, source_table: 'other' }, objects[0], [known]), '');
   assert.equal(suggestObjectKey(form, objects[0], [known, { ...known, source_field: 'OTHER_ID' }]), '');

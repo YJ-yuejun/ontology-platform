@@ -403,6 +403,7 @@ def init_db() -> None:
         seed_pipeline_domain()
         repair_data_source_provenance()
         repair_mapping_type_contract()
+        migrate_mapping_way_codes()
         seed_domain_hierarchy()
         repair_object_state_property()
         migrate_legacy_scenario_steps()
@@ -2423,6 +2424,41 @@ def seed_domain_hierarchy() -> None:
             (fallback_subject["id"], "system-migration", oid),
         )
         conn.commit(); conn.close()
+
+
+# map_way 曾经按显示名称存储（前端 DictionaryField 默认回写 name），
+# 与按 code 存储的记录混在同一列里。这里一次性收敛为 code。
+MAPPING_WAY_CODES = {
+    "直接映射": "direct", "枚举映射": "enum_map", "公式计算": "expr",
+    "脚本计算": "script", "常量映射": "constant", "自定义流程": "workflow",
+    "关联映射": "link", "字段/单位映射": "unit",
+}
+
+
+def migrate_mapping_way_codes() -> int:
+    """把 enterprise_data_mappings.payload.map_way 的历史中文值改写为字典 code。"""
+    conn = get_conn()
+    marker = "v1.9-mapping-way-code-normalization"
+    if conn.execute("SELECT 1 FROM prototype_migrations WHERE migration_key=?", (marker,)).fetchone():
+        conn.close()
+        return 0
+    changed = 0
+    rows = conn.execute("SELECT id,payload FROM enterprise_data_mappings").fetchall()
+    for row in rows:
+        try:
+            payload = json.loads(row["payload"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        current = payload.get("map_way")
+        if not isinstance(current, str) or current not in MAPPING_WAY_CODES:
+            continue
+        payload["map_way"] = MAPPING_WAY_CODES[current]
+        conn.execute("UPDATE enterprise_data_mappings SET payload=? WHERE id=?", (_json(payload), row["id"]))
+        changed += 1
+    conn.execute("INSERT INTO prototype_migrations (migration_key,applied_at) VALUES (?,?)", (marker, now()))
+    conn.commit()
+    conn.close()
+    return changed
 
 
 def apply_v19_product_model() -> None:

@@ -141,7 +141,9 @@ export default function Actions({ activeId, refreshOntologies, notify }) {
       <section className="form-section"><h3>1. 基础信息</h3><div className="form-grid two">
         <label><span>行动ID</span><input required disabled={Boolean(editing)} value={form['行动ID']} onChange={change('行动ID')} placeholder="A-001" /><small>稳定引用编号，创建后不可修改。</small></label>
         <label><span>行动名称</span><input required value={form['行动名称']} onChange={change('行动名称')} placeholder="暂停运输任务" /></label>
-        <DictionaryField kind="action_type" label="行动类型" required value={form['行动类型']} onChange={(value) => setForm((old) => ({ ...old, 行动类型: value }))} />
+        {/* 行动类型沿用模板口径按显示名存储（业务行动/控制行动/通知行动），
+            与 system_type 等一起待后续统一收敛为 code。 */}
+        <DictionaryField kind="action_type" label="行动类型" required value={form['行动类型']} valueMode="name" onChange={(value) => setForm((old) => ({ ...old, 行动类型: value }))} />
         <label><span>作用对象</span><input required list="action-object-options" value={form['作用对象']} onChange={change('作用对象')} placeholder="选择或填写作用对象" /><datalist id="action-object-options">{objects.map((object) => <option value={object.display_name} key={object.id} />)}</datalist></label>
       </div></section>
       <section className="form-section"><h3>2. 输入与执行逻辑</h3><div className="form-grid two">

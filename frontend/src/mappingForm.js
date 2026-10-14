@@ -1,5 +1,8 @@
 export const sourceKinds = [['table', '来源表'], ['api', '来源接口'], ['file', '来源文件']];
 
+// 映射方式按 dic_mapping_way 的 code 存储；此前直接写中文名，与按 code 存的记录混在一列。
+export const isDirectMapping = (mapWay) => mapWay === 'direct';
+
 // The source carrier is independent of the ontology mapping type.
 export function mappingSourceKind(mapping = {}, source = {}) {
   if (sourceKinds.some(([value]) => value === mapping.source_kind)) return mapping.source_kind;
@@ -46,14 +49,14 @@ export function resetMappingSource(form, changes, relation) {
   return { ...form, ...changes, source_field: '',
     source_key: form.mapping_type === 'relation' ? relationDefaultKey(relation) : '',
     target_key: '', relation_field_bindings: [], relation_key_mode: 'link_table',
-    map_way: form.mapping_type === 'relation' ? '关联映射' : '直接映射',
+    map_way: form.mapping_type === 'relation' ? 'link' : 'direct',
     transform_rule: '', lookup_dictionary: '', quality_rule: '', design_status: '设计中' };
 }
 
 export function selectMappingRelation(form, relation) {
   if (form.target_relation === (relation?.name || '')) return form;
   return resetMappingSource(form, { target_relation: relation?.name || '', target_object_type: '', target_property: '',
-    map_way: '关联映射', governance_relation_fields: ['', ''] }, relation);
+    map_way: 'link', governance_relation_fields: ['', ''] }, relation);
 }
 
 export function changeMappingType(form, mappingType) {
@@ -62,18 +65,18 @@ export function changeMappingType(form, mappingType) {
     relation_key_mode: 'link_table',
     governance_field: '', governance_relation_fields: ['', ''],
     target_object_type: '', target_property: '', target_relation: '', relation_field_bindings: [],
-    map_way: mappingType === 'relation' ? '关联映射' : '直接映射', transform_rule: '', lookup_dictionary: '' };
+    map_way: mappingType === 'relation' ? 'link' : 'direct', transform_rule: '', lookup_dictionary: '' };
 }
 
 export function suggestObjectKey(form, object, mappings = []) {
   if (!object || form.mapping_type !== 'property') return '';
   const primary = object.properties?.find((property) => property.is_primary_key);
   if (!primary) return '';
-  if (form.target_property === primary.key && ['直接映射', 'direct'].includes(form.map_way)) return form.source_field || '';
+  if (form.target_property === primary.key && isDirectMapping(form.map_way)) return form.source_field || '';
   const candidates = mappings.filter((item) => item.mapping_type === 'property'
     && item.target_object_type === object.name && item.target_property === primary.key
     && item.source_code === form.source_code && item.source_table === form.source_table
-    && ['直接映射', 'direct'].includes(item.map_way) && item.source_field);
+    && isDirectMapping(item.map_way) && item.source_field);
   const keys = [...new Set(candidates.map((item) => item.source_field))];
   return keys.length === 1 ? keys[0] : '';
 }

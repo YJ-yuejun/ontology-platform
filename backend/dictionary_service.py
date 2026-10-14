@@ -29,7 +29,9 @@ SEEDS = {
     "system_type": [("business", "业务系统"), ("realtime", "实时系统"), ("asset", "资产系统"), ("finance", "财务系统"), ("monitor", "监测系统"), ("dispatch", "调度系统"), ("external", "外部系统"), ("other", "其他")],
     "data_category": [("general", "通用数据"), ("transaction", "交易数据"), ("master", "主数据"), ("realtime", "实时数据"), ("analysis", "分析数据"), ("log", "日志数据"), ("other", "其他")],
     "interface_type": [("api", "API"), ("database", "数据库"), ("file", "文件"), ("mq", "消息队列"), ("rest", "REST"), ("other", "其他")],
-    "mapping_way": [("direct", "直接映射"), ("enum_map", "枚举映射"), ("expr", "公式计算"), ("script", "脚本计算"), ("constant", "常量映射"), ("workflow", "自定义流程")],
+    # link / unit 是模板里已有的两个口径（关联映射、字段/单位映射）原本没有对应代码，
+    # 导致前端只能把中文名直接当值存储。补上代码后统一按 code 存取。
+    "mapping_way": [("direct", "直接映射"), ("enum_map", "枚举映射"), ("expr", "公式计算"), ("script", "脚本计算"), ("constant", "常量映射"), ("workflow", "自定义流程"), ("link", "关联映射"), ("unit", "字段/单位映射")],
     "action_type": [("business", "业务行动"), ("control", "控制行动"), ("notify", "通知行动"), ("calculate", "计算行动"), ("manual", "人工行动"), ("other", "其他")],
     "xform_rule": [("enum_map", "枚举映射"), ("unit_standardize", "单位标准化"), ("unit_convert", "单位换算"), ("window_calc", "滑动窗口计算"), ("level_map", "等级映射")],
 }
