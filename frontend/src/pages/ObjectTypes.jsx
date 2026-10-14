@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ChevronLeft, ChevronRight, KeyRound, Layers3, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ChevronRight, KeyRound, Layers3, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { api } from '../api';
-import { dataTypeLabel, designStatusLabel, designStatusValue, DESIGN_STATUS_OPTIONS, statusLabel, STATUS_OPTIONS } from '../labels';
+import { dataTypeLabel, designStatusLabel, designStatusValue, statusLabel, STATUS_OPTIONS } from '../labels';
 import Modal from '../components/Modal';
 import ResourceHistoryLink from '../components/ResourceHistoryLink';
 import { ObjectIconPicker, ObjectTypeIcon } from '../components/ObjectTypeIcon';
@@ -14,24 +14,12 @@ import useHistoryResourceFocus from '../hooks/useHistoryResourceFocus';
 import { useModelingEntry } from '../components/ModelingEntry';
 import { governanceFieldCandidates, objectMappingState } from '../objectMapping';
 
-// 这组值来自模板“02_对象类型·对象类别”。已导入的采购/管网原值会并入下拉框，
-// 不在编辑时静默改名，避免破坏模板来源证据。
-const TEMPLATE_OBJECT_CATEGORIES = ['业务实体', '业务任务', '物理资产', '业务事件'];
 const emptyForm = () => ({
   external_id: '', name: '', display_name: '', icon: 'box', title_property: '', description: '',
   status: 'experimental', design_status: 'draft', properties: [], subject_domain_id: '',
   interface_ids: [], backing_source: '', category: '业务实体', domain: '', lifecycle: '', state_property: '',
   owner: '', source_system: '', is_core: false, is_event: false, requires_action: false,
 });
-const STEPS = [
-  ['基础信息', '模板 ID、稳定标识与业务定义'],
-  ['业务归属', '对象类别、业务域与主题域'],
-  ['属性定义', '主键、标题与模板属性字段'],
-  ['接口与检查', '接口契约与保存前校验'],
-];
-
-const uniqueValues = (values) => [...new Set(values.filter(Boolean))];
-
 // 对象 API 名称和属性字段名是运行时稳定引用，不能直接使用中文显示名称。
 // 之前只在后端 Pydantic 校验，用户一直填到最后一步才看到一个不易理解的 422。
 const OBJECT_API_NAME_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
@@ -56,8 +44,6 @@ const validatePropertyForm = (properties = []) => {
 const validateObjectForm = (form) => {
   if (!String(form.display_name || '').trim()) return '请填写对象显示名称。';
   if (!OBJECT_API_NAME_PATTERN.test(String(form.name || ''))) return '稳定标识（API 名称）必须以大写英文字母开头，只能包含英文字母和数字，例如 PurchaseContract。';
-  if (!form.category) return '请选择对象类别。';
-  if (!form.domain) return '请选择业务域。';
   const propertyError = validatePropertyForm(form.properties);
   if (propertyError) return propertyError;
   const keys = new Set((form.properties || []).map((item) => item.key));
@@ -75,7 +61,6 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
   const [governanceAssets, setGovernanceAssets] = useState([]);
   const [mappings, setMappings] = useState([]);
   const [subjects, setSubjects] = useState([]);
-  const [domains, setDomains] = useState([]);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState('all');
   const [page, setPage] = useState(1);
@@ -84,7 +69,6 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(emptyForm());
-  const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [formError, setFormError] = useState('');
@@ -100,12 +84,11 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
   const load = async (preferredId) => {
     setError('');
     try {
-      const [objects, interfaceRows, sourceRows, assetRows, mappingRows, subjectRows, domainRows] = await Promise.all([
+      const [objects, interfaceRows, sourceRows, assetRows, mappingRows, subjectRows] = await Promise.all([
         api(`/api/ontologies/${activeId}/object-types`), api(`/api/ontologies/${activeId}/interfaces`),
         api(`/api/ontologies/${activeId}/enterprise/data-sources`), api(`/api/ontologies/${activeId}/enterprise/governance-assets`), api(`/api/ontologies/${activeId}/enterprise/data-mappings`), api(`/api/ontologies/${activeId}/subject-domains`),
-        api(`/api/ontologies/${activeId}/business-domains`),
       ]);
-      setItems(objects); setInterfaces(interfaceRows); setSources(sourceRows); setGovernanceAssets(assetRows); setMappings(mappingRows); setSubjects(subjectRows); setDomains(domainRows);
+      setItems(objects); setInterfaces(interfaceRows); setSources(sourceRows); setGovernanceAssets(assetRows); setMappings(mappingRows); setSubjects(subjectRows);
       setSelected((old) => objects.find((item) => item.id === (preferredId || old?.id)) || objects[0] || null);
     } catch (loadError) { setError(loadError.message); }
   };
@@ -121,7 +104,6 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
   useEffect(() => { setPage(1); }, [query, status, pageSize]);
   useEffect(() => { if (items && !filtered.some((item) => item.id === selected?.id)) setSelected(filtered[0] || null); }, [items, filtered, selected?.id]);
   useHistoryResourceFocus({ resourceTypes: ['object_type', '对象'], items, visible: filtered, pageSize, setPage, onSelect: setSelected, ready: Boolean(items) });
-  const subjectName = (id) => subjects.find((item) => item.id === id)?.name || '未分类';
   const interfaceName = (id) => interfaces.find((item) => item.id === id)?.display_name || '未知接口';
   const sourceName = (code) => sources.find((item) => item.code === code)?.name || code || '未映射';
   const mappingState = (item) => objectMappingState(item, mappings);
@@ -129,13 +111,17 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
   const selectedAsset = confirmedAssets.find((item) => item.code === selectedAssetCode);
   const mappingHintAsset = selected && mappingHint?.objectId === selected.id
     ? confirmedAssets.find((item) => item.code === mappingHint.assetCode) : null;
-  const domainOptions = uniqueValues([...(domains || []).map((item) => item.name), ...(items || []).map((item) => item.domain)]);
-  const availableSubjects = subjects.filter((item) => item.business_domain_name === form.domain || item.id === form.subject_domain_id);
-  const sourceSystemOptions = uniqueValues([...(sources || []).map((item) => item.name), ...(items || []).map((item) => item.source_system)]);
-  const categoryOptions = uniqueValues([...TEMPLATE_OBJECT_CATEGORIES, ...(items || []).map((item) => item.category)]);
+  // 主题域直接列出全部，不再按模板“业务域”过滤：模板业务域是导入的文本口径，
+  // 与平台业务域对不上时会把主题域列表筛空，且服务端本来就是从主题域反推业务域。
+  const availableSubjects = subjects;
+  const changeSubject = (id) => {
+    const subject = subjects.find((item) => item.id === id);
+    setForm((old) => ({ ...old, subject_domain_id: id,
+      domain: subject?.business_domain_name || old.domain }));
+  };
 
   const startManualCreate = () => {
-    setForm(emptyForm()); setStep(0); setFormError(''); setCreating(true); setEditing(null); setStatePropertyNote('');
+    setForm(emptyForm()); setFormError(''); setCreating(true); setEditing(null); setStatePropertyNote('');
     setCreationBasis('semantic'); setSelectedAssetCode(''); setSelectedCandidateFields([]); setCandidateHints([]);
   };
   const startCreate = () => requestResource({ type: 'object_type', onManual: startManualCreate });
@@ -155,7 +141,7 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
       setStatePropertyNote('');
     }
     setForm({ ...emptyForm(), ...item, properties, interface_ids: item.interface_ids || [], subject_domain_id: item.subject_domain_id || '', backing_source: item.backing_source || '', external_id: item.external_id || '', design_status: designStatusValue(item.design_status), is_core: Boolean(item.is_core), is_event: Boolean(item.is_event), requires_action: Boolean(item.requires_action), title_property: titlePropertyValid ? (item.title_property || '') : '', state_property: statePropertyValid ? item.state_property : '' });
-    setStep(0); setFormError(''); setEditing(item); setCreating(false);
+    setFormError(''); setEditing(item); setCreating(false);
   };
   const close = () => { setCreating(false); setEditing(null); setFormError(''); setStatePropertyNote(''); };
   useCreateIntent(Boolean(items), startManualCreate);
@@ -173,11 +159,7 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
     setForm((old) => ({ ...old, properties: [...old.properties, ...additions] }));
     setCandidateHints((old) => [...old, ...chosen.filter((candidate) => additions.some((item) => item.key === candidate.candidateKey)).map((candidate) => ({ ...candidate, assetName: selectedAsset.name }))]);
     setSelectedCandidateFields([]);
-    const identityReady = Boolean(form.display_name && OBJECT_API_NAME_PATTERN.test(form.name || ''));
-    const classificationReady = Boolean(form.category && form.domain);
-    const nextStep = identityReady ? classificationReady ? 2 : 1 : 0;
-    setStep(nextStep);
-    notify(`已将 ${additions.length} 个字段加入待确认属性草稿。请从“${STEPS[nextStep][0]}”继续；对象和映射尚未保存。`);
+    notify(`已将 ${additions.length} 个字段加入待确认属性草稿。请在“对象属性”中补全中文名称与业务定义；对象和映射尚未保存。`);
   };
 
   const toggleInterface = (entry) => {
@@ -206,7 +188,6 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
     if (!window.confirm(`确定删除对象类型“${item.display_name}”吗？`)) return;
     try { await api(`/api/object-types/${item.id}`, { method: 'DELETE' }); await load(); refreshOntologies(activeId); } catch (removeError) { notify(removeError.message); }
   };
-  const canContinue = step === 0 ? Boolean(form.display_name && OBJECT_API_NAME_PATTERN.test(form.name || '')) : step === 1 ? Boolean(form.category && form.domain) : step === 2 ? !validatePropertyForm(form.properties) : true;
   // 状态属性下拉：模板字段是“状态属性”语义，这里只允许选标注为状态属性或枚举类型的属性。
   const statePropertyOptions = form.properties.filter((item) => item.key && (item.property_category === '状态属性' || item.type === 'enum'));
   const openSemanticMapping = (item, assetCode = '') => {
@@ -228,20 +209,52 @@ export default function ObjectTypes({ activeId, active, refreshOntologies, notif
         <section className="oma-mapping-setup"><div><strong>语义映射</strong><em className={`oma-mapping-state ${selectedMappingState.label === '已确认' || selectedMappingState.label === '无需映射' ? 'confirmed' : ''}`}>{selectedMappingState.label}</em></div><p>{mappingCoverageText(selectedMappingState)}{selectedMappingState.count ? `；已存属性映射 ${selectedMappingState.confirmedCount}/${selectedMappingState.count} 条已确认、${selectedMappingState.pendingCount} 条待确认` : ''}。保存对象定义不会导入或读取实例数据。</p>{mappingHintAsset && <small>创建时选择的参考治理资产：{mappingHintAsset.name}（仅作为映射上下文）</small>}<button className="btn secondary" onClick={() => openSemanticMapping(selected, mappingHintAsset?.code)}>{selectedMappingState.count ? '检查或补充映射' : selectedMappingState.requiredCount > 0 ? '建立语义映射' : '配置可选映射'} <ChevronRight size={14} /></button></section>
         {selected.source_binding_issue && !selected.backing_source && <p className="template-field-note">{selected.source_binding_issue}。模板原值是“{selected.source_system}”，请通过治理资产建立新的语义映射。</p>}<div className="oma-interface-props"><strong>对象属性</strong>{selected.properties.map((prop) => <div key={prop.key}><span>{prop.name}{prop.is_primary_key && <KeyRound size={11} />}{prop.is_required && <em>必填</em>}</span><code>{prop.key} · {dataTypeLabel(prop.type)}{prop.source_field ? ` · ${prop.source_field}` : ''}</code></div>)}</div></> : <EmptyState title="请选择对象" description="从左侧目录查看对象定义。" />}</aside></div>
 
-    {(creating || editing) && <Modal wide closeOnBackdrop={false} title={editing ? '编辑对象类型' : '新建对象类型'} subtitle="基础信息 → 业务归属 → 属性定义 → 接口与检查" onClose={close} footer={<><button className="btn secondary" onClick={close}>取消</button>{step > 0 && <button className="btn secondary" onClick={() => setStep(step - 1)}><ChevronLeft size={15} /> 上一步</button>}{step < STEPS.length - 1 ? <button className="btn primary" disabled={!canContinue} onClick={() => setStep(step + 1)}>下一步 <ChevronRight size={15} /></button> : <button className="btn primary" form="object-form" disabled={busy}>{busy ? '保存中…' : '保存到工作状态'}</button>}</>}>
+    {(creating || editing) && <Modal wide closeOnBackdrop={false} title={editing ? `编辑对象类型 · ${editing.display_name}` : '新建对象类型'} subtitle="身份、归属、属性与接口在同一页完成" onClose={close} footer={<><button className="btn secondary" onClick={close}>取消</button><button className="btn primary" form="object-form" disabled={busy}>{busy ? '保存中…' : '保存到工作状态'}</button></>}>
       {formError && <div className="form-error-banner" role="alert">{formError}</div>}
-      {!editing && <section className="oma-creation-basis"><div className="oma-creation-basis-heading"><strong>手动建模依据</strong><small>这是手动方式下的起点选择，不改变对象模板字段；智能构建仍可从对话入口进入。</small></div><div className="oma-creation-basis-options"><button type="button" className={creationBasis === 'semantic' ? 'selected' : ''} aria-pressed={creationBasis === 'semantic'} onClick={() => { setCreationBasis('semantic'); setSelectedAssetCode(''); setSelectedCandidateFields([]); }}><strong>从业务语义开始</strong><span>先定义对象身份、业务边界和属性；可以暂时没有映射。</span></button><button type="button" className={creationBasis === 'governed_asset' ? 'selected' : ''} aria-pressed={creationBasis === 'governed_asset'} onClick={() => setCreationBasis('governed_asset')}><strong>从已确认治理资产辅助</strong><span>查看已确认资产的字段元数据，作为待确认的属性候选。</span></button></div>
-        {creationBasis === 'governed_asset' && <div className="oma-asset-candidate-panel"><label><span>选择已确认治理资产</span><select value={selectedAssetCode} onChange={(event) => { setSelectedAssetCode(event.target.value); setSelectedCandidateFields([]); }}><option value="">请选择已确认资产</option>{confirmedAssets.map((asset) => <option key={asset.id} value={asset.code}>{asset.name} · {asset.code}</option>)}</select><small>只显示人工确认过的治理资产；不选择物理表，也不建立数据连接。</small></label>{!confirmedAssets.length && <p className="template-field-note">当前没有已确认治理资产。可先到“数据源与映射”登记并确认资产，或继续从业务语义开始。</p>}
-          {selectedAsset && <div className="oma-asset-candidate-list"><div><strong>{selectedAsset.name} · 字段候选</strong><small>字段名称和登记类型仅是元数据；中文业务名称、含义、主键及映射均需你确认。</small></div><div className="oma-asset-candidate-rows">{governanceFieldCandidates(selectedAsset.fields || []).map((candidate) => <label key={candidate.candidateKey}><input type="checkbox" checked={selectedCandidateFields.includes(candidate.candidateKey)} onChange={() => setSelectedCandidateFields((old) => old.includes(candidate.candidateKey) ? old.filter((key) => key !== candidate.candidateKey) : [...old, candidate.candidateKey])} /><span><strong>{candidate.sourceField}</strong><small>{candidate.declaredType || '类型未登记'}</small></span><code>{candidate.candidateKey} · {dataTypeLabel(candidate.candidateType)} 候选</code></label>)}{!selectedAsset.fields?.length && <p className="template-field-note">该资产还没有字段契约；可先继续填写对象业务语义。</p>}</div><button type="button" className="btn secondary small" disabled={!selectedCandidateFields.length} onClick={addSelectedFieldCandidates}>将选中字段加入属性草稿</button><p className="template-field-note">加入后仍需在“属性定义”中填写中文属性名和业务定义、检查数据类型及主键。治理字段不是已保存的属性映射，属性的“来源字段”模板值也不代表映射成功。</p></div>}
-        </div>}
-      </section>}
-      {!editing && candidateHints.length > 0 && <div className="template-field-note">已暂存 {candidateHints.length} 个治理字段属性候选；请按上述步骤补全基础信息、业务归属，并逐项确认属性语义。它们尚未保存为对象属性，也没有建立映射。</div>}
-      <div className="object-wizard-steps object-wizard-steps-four">{STEPS.map(([title, copy], index) => <button type="button" key={title} className={`${index === step ? 'active' : ''} ${index < step ? 'done' : ''}`} onClick={() => index < step && setStep(index)}><i>{index < step ? <Check size={13} /> : index + 1}</i><span><b>{title}</b><small>{copy}</small></span></button>)}</div>
-      <form id="object-form" className="form-sections object-wizard-form" onSubmit={save}>
-        {step === 0 && <div className="form-section"><h3>对象身份与业务边界</h3><div className="form-grid two"><label><span>对象类型 ID（模板）</span><input className="mono" value={form.external_id} onChange={(e) => setForm({ ...form, external_id: e.target.value })} placeholder="例如：OBJ-001" /><small>保留工作簿中的业务编号；平台稳定标识单独维护。</small></label><label><span>显示名称</span><input autoFocus required value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} placeholder="例如：采购合同" /></label><label><span>稳定标识（API 名称）</span><input className="mono" required disabled={editing && ['active', 'promoted'].includes(editing.status)} aria-invalid={Boolean(form.name && !OBJECT_API_NAME_PATTERN.test(form.name))} value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setFormError(''); }} placeholder="PurchaseContract" />{form.name && !OBJECT_API_NAME_PATTERN.test(form.name) ? <small className="field-error">必须以大写英文字母开头，只能包含英文字母和数字，例如 PurchaseContract。</small> : <small>供接口和程序稳定引用，发布后不可直接修改；中文显示名称请填写在上一项。</small>}</label><label><span>资源使用状态</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{STATUS_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><small>仅表示资源是否可用，不等同模板“建模状态”。</small></label><label><span>模板建模状态</span><select value={form.design_status || 'draft'} onChange={(e) => setForm({ ...form, design_status: e.target.value })}>{DESIGN_STATUS_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label><span>数据负责人</span><input value={form.owner || ''} onChange={(e) => setForm({ ...form, owner: e.target.value })} placeholder="例如：示例负责人" /></label></div><label><span>选择图标</span><ObjectIconPicker value={form.icon} onChange={(icon) => setForm({ ...form, icon })} /></label><label><span>业务定义</span><textarea value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="说明对象的身份、业务边界和生命周期" /></label></div>}
-        {step === 1 && <div className="form-section"><h3>业务分类与生命周期</h3><div className="form-grid two"><label><span>对象类别（模板字段）</span><select value={form.category || ''} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categoryOptions.map((category) => <option key={category}>{category}</option>)}</select><small>保留模板“业务实体 / 业务任务 / 物理资产 / 业务事件”等原值。</small></label><label><span>业务域（模板字段）</span><select required value={form.domain || ''} onChange={(e) => setForm({ ...form, domain: e.target.value, subject_domain_id: '' })}><option value="">请选择业务域</option>{domainOptions.map((domain) => <option key={domain}>{domain}</option>)}</select></label><label><span>主题域（平台分类扩展）</span><select value={form.subject_domain_id || ''} onChange={(e) => setForm({ ...form, subject_domain_id: e.target.value })}><option value="">暂不分类</option>{availableSubjects.map((item) => <option key={item.id} value={item.id}>{item.business_domain_name} / {item.name}</option>)}</select><small>{availableSubjects.some((item) => item.id === form.subject_domain_id && item.business_domain_name !== form.domain) ? '当前为历史跨域归属；修改业务域后需要重新选择主题域。' : '只显示当前业务域下的主题域；模板业务域原值保留。'}</small></label><label><span>来源系统（模板字段）</span><select value={form.source_system || ''} onChange={(e) => setForm({ ...form, source_system: e.target.value })}><option value="">未指定</option>{sourceSystemOptions.map((source) => <option key={source}>{source}</option>)}</select></label><label><span>生命周期</span><input value={form.lifecycle || ''} onChange={(e) => setForm({ ...form, lifecycle: e.target.value })} placeholder="例如：创建→执行中→完成/取消" /></label></div><div className="template-boolean-grid"><label className="check"><input type="checkbox" checked={Boolean(form.is_core)} onChange={(e) => setForm({ ...form, is_core: e.target.checked })} /> 核心对象</label><label className="check"><input type="checkbox" checked={Boolean(form.is_event)} onChange={(e) => setForm({ ...form, is_event: e.target.checked })} /> 事件对象</label><label className="check"><input type="checkbox" checked={Boolean(form.requires_action)} onChange={(e) => setForm({ ...form, requires_action: e.target.checked })} /> 需要行动</label></div><div className="template-field-note">“业务域”来自模板对象表；“主题域”只负责在系统内组织资源。停用分类资源前，系统应先查看下属对象和场景影响。</div></div>}
-        {step === 2 && <div className="form-section">{candidateHints.length > 0 && <section className="oma-candidate-hints"><strong>属性候选来源于治理字段</strong><p>这些候选尚未确认业务语义，也不是映射。名称字段由元数据安全生成，中文属性名称与业务定义需逐项补充。</p><div>{candidateHints.map((candidate) => <span key={`${candidate.assetName}-${candidate.sourceField}-${candidate.candidateKey}`}><small>{candidate.assetName}</small><code>{candidate.sourceField}</code><ChevronRight size={12} /><code>{candidate.candidateKey}</code><em>待确认</em></span>)}</div></section>}<PropertyEditor primaryKey sources={sources} templateMode label="对象属性（模板字段）" value={form.properties} onChange={(properties) => setForm({ ...form, properties })} /><div className="form-grid two"><label><span>标题属性</span><select value={form.title_property || ''} onChange={(e) => setForm({ ...form, title_property: e.target.value })}><option value="">默认使用主键</option>{form.properties.filter((item) => item.key).map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}</select><small>实例列表和关系穿透中用它显示对象。</small></label><label><span>状态属性（模板字段）</span><select value={form.state_property || ''} onChange={(e) => setForm({ ...form, state_property: e.target.value })}><option value="">未指定</option>{statePropertyOptions.map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}{form.state_property && !statePropertyOptions.some((item) => item.key === form.state_property) && <option value={form.state_property}>{form.state_property}{form.properties.some((item) => item.key === form.state_property) ? '（当前值，未标注为状态属性）' : '（原值，属性已不存在）'}</option>}</select>{statePropertyNote && <small>{statePropertyNote}</small>}</label></div></div>}
-        {step === 3 && <div className="form-section"><h3>接口与保存前检查</h3><div className="form-grid two"><label><span>对象属性数量</span><input value={`${form.properties.length} 项`} disabled /></label><div className="template-field-note">对象定义不直接选择物理数据源。映射需在保存对象后到“数据源与映射 → 语义映射”逐项配置；此处不会自动保存映射。</div></div>{form.backing_source && <p className="template-field-note">历史直接来源：{sourceName(form.backing_source)}。保留原记录作溯源，不作为新映射入口。</p>}{creationBasis === 'governed_asset' && selectedAsset && <p className="template-field-note">参考治理资产：{selectedAsset.name}（字段仅作为候选元数据）。保存对象后可带此资产上下文进入语义映射；实例数据不会因此导入或读取。</p>}<fieldset className="compact-check-field"><legend><Layers3 size={15} /> 实现接口（可选）</legend><p>接口只声明可复用的结构契约；外部系统调用在“系统能力与行动执行映射”管理。</p><div className="compact-check-list">{interfaces.map((entry) => <label key={entry.id}><input type="checkbox" checked={form.interface_ids.includes(entry.id)} onChange={() => toggleInterface(entry)} /><span><b>{entry.display_name}</b><code>{entry.name}</code><small>{entry.properties.length} 项属性契约</small></span></label>)}{!interfaces.length && <em>当前本体尚未定义接口，可先到“接口”页新建。</em>}</div></fieldset><div className="object-wizard-summary"><ObjectTypeIcon value={form.icon} size={22} /><div><strong>{form.display_name || '未命名对象'}</strong><code>{form.name || 'ObjectType'}</code></div><span>{form.category || '未填类别'} · {form.domain || '未填业务域'} · {subjectName(form.subject_domain_id)} · {form.properties.length} 项属性</span></div><div className="template-field-note">保存只进入当前工作状态；对象字段和接口契约会保存到工作状态，映射需另行确认。对象保存不会导入实例，也不会自动创建业务行动。</div></div>}
+      <form id="object-form" className="form-sections object-editor" onSubmit={save}>
+        <section className="form-section"><h3>对象身份</h3><div className="form-grid two">
+          <label><span>显示名称</span><input autoFocus required value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} placeholder="例如：采购合同" /></label>
+          <label><span>稳定标识（API 名称）</span><input className="mono" required disabled={editing && ['active', 'promoted'].includes(editing.status)} aria-invalid={Boolean(form.name && !OBJECT_API_NAME_PATTERN.test(form.name))} value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setFormError(''); }} placeholder="PurchaseContract" />{form.name && !OBJECT_API_NAME_PATTERN.test(form.name) ? <small className="field-error">必须以大写英文字母开头，只能包含英文字母和数字，例如 PurchaseContract。</small> : <small>供接口和程序稳定引用，发布后不可直接修改。</small>}</label>
+          <label><span>资源使用状态</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{STATUS_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><small>仅表示资源是否可用，不等同模板“建模状态”。</small></label>
+          <label><span>主题域</span><select value={form.subject_domain_id || ''} onChange={(e) => changeSubject(e.target.value)}><option value="">暂不分类</option>{availableSubjects.map((item) => <option key={item.id} value={item.id}>{item.business_domain_name} / {item.name}</option>)}</select><small>可暂不分类，但提交评审前必须归入主题域。业务域由所选主题域带出，不用单独填写。</small></label>
+        </div>
+          <label><span>选择图标</span><ObjectIconPicker value={form.icon} onChange={(icon) => setForm({ ...form, icon })} /></label>
+          <label><span>业务定义</span><textarea value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="说明对象的身份、业务边界和生命周期" /></label>
+        </section>
+
+        <section className="form-section"><h3>对象属性</h3>
+          {!editing && <details className="object-asset-basis"><summary>从已确认治理资产带入字段（可选）</summary>
+            <p className="form-hint">只读取已确认资产的字段元数据作为待确认候选，不选择物理表，也不建立数据连接或映射。</p>
+            <label><span>选择已确认治理资产</span><select value={selectedAssetCode} onChange={(event) => { setSelectedAssetCode(event.target.value); setSelectedCandidateFields([]); }}><option value="">请选择已确认资产</option>{confirmedAssets.map((asset) => <option key={asset.id} value={asset.code}>{asset.name} · {asset.code}</option>)}</select></label>
+            {!confirmedAssets.length && <p className="template-field-note">当前没有已确认治理资产。可先到“数据源与映射”登记并确认资产。</p>}
+            {selectedAsset && <div className="oma-asset-candidate-list"><div><strong>{selectedAsset.name} · 字段候选</strong><small>字段名称和登记类型仅是元数据；中文业务名称、含义和主键均需你确认。</small></div><div className="oma-asset-candidate-rows">{governanceFieldCandidates(selectedAsset.fields || []).map((candidate) => <label key={candidate.candidateKey}><input type="checkbox" checked={selectedCandidateFields.includes(candidate.candidateKey)} onChange={() => setSelectedCandidateFields((old) => old.includes(candidate.candidateKey) ? old.filter((key) => key !== candidate.candidateKey) : [...old, candidate.candidateKey])} /><span><strong>{candidate.sourceField}</strong><small>{candidate.declaredType || '类型未登记'}</small></span><code>{candidate.candidateKey} · {dataTypeLabel(candidate.candidateType)} 候选</code></label>)}{!selectedAsset.fields?.length && <p className="template-field-note">该资产还没有字段契约；可先继续填写对象业务语义。</p>}</div><button type="button" className="btn secondary small" disabled={!selectedCandidateFields.length} onClick={addSelectedFieldCandidates}>将选中字段加入属性草稿</button></div>}
+          </details>}
+          {!editing && candidateHints.length > 0 && <div className="template-field-note">已暂存 {candidateHints.length} 个治理字段属性候选；请在下方补全中文名称与业务定义。它们尚未保存为对象属性，也没有建立映射。</div>}
+          <PropertyEditor primaryKey templateMode label="对象属性" value={form.properties} onChange={(properties) => setForm({ ...form, properties })} />
+          <div className="form-grid two">
+            <label><span>标题属性</span><select value={form.title_property || ''} onChange={(e) => setForm({ ...form, title_property: e.target.value })}><option value="">默认使用主键</option>{form.properties.filter((item) => item.key).map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}</select><small>实例列表和关系穿透中用它显示对象。</small></label>
+            <label><span>状态属性</span><select value={form.state_property || ''} onChange={(e) => setForm({ ...form, state_property: e.target.value })}><option value="">未指定</option>{statePropertyOptions.map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}{form.state_property && !statePropertyOptions.some((item) => item.key === form.state_property) && <option value={form.state_property}>{form.state_property}{form.properties.some((item) => item.key === form.state_property) ? '（当前值，未标注为状态属性）' : '（原值，属性已不存在）'}</option>}</select>{statePropertyNote && <small>{statePropertyNote}</small>}</label>
+          </div>
+        </section>
+
+        <section className="form-section"><h3>实现接口</h3>
+          <fieldset className="compact-check-field"><legend><Layers3 size={15} /> 实现接口（可选）</legend><p>接口只声明可复用的结构契约；外部系统调用在“系统能力与行动执行映射”管理。</p><div className="compact-check-list">{interfaces.map((entry) => <label key={entry.id}><input type="checkbox" checked={form.interface_ids.includes(entry.id)} onChange={() => toggleInterface(entry)} /><span><b>{entry.display_name}</b><code>{entry.name}</code><small>{entry.properties.length} 项属性契约</small></span></label>)}{!interfaces.length && <em>当前本体尚未定义接口，可先到“接口”页新建。</em>}</div></fieldset>
+          <p className="template-field-note">保存只进入当前工作状态；映射需在“数据源与映射 → 语义映射”另行配置，对象保存不会导入实例，也不会自动创建业务行动。</p>
+        </section>
+
+        {editing && <details className="object-template-source"><summary>模板来源（只读）</summary>
+          <p className="form-hint">以下字段来自《本体建模模板》导入，不是平台语义，因此不在表单里编辑；原值继续保留用于溯源。</p>
+          <dl>
+            <div><dt>模板对象类型 ID</dt><dd><code>{form.external_id || '未填写'}</code></dd></div>
+            <div><dt>对象类别</dt><dd>{form.category || '未填写'}</dd></div>
+            <div><dt>模板业务域原值</dt><dd>{form.domain || '未填写'}</dd></div>
+            <div><dt>模板来源系统</dt><dd>{form.source_system || '未填写'}</dd></div>
+            <div><dt>生命周期</dt><dd>{form.lifecycle || '未填写'}</dd></div>
+            <div><dt>核心 / 事件 / 需行动</dt><dd>{[form.is_core && '核心对象', form.is_event && '事件对象', form.requires_action && '需要行动'].filter(Boolean).join('、') || '无'}</dd></div>
+            <div><dt>数据负责人</dt><dd>{form.owner || '未填写'}</dd></div>
+            <div><dt>模板建模状态</dt><dd>{designStatusLabel(form.design_status)}</dd></div>
+          </dl>
+        </details>}
       </form>
     </Modal>}
   </div>;
