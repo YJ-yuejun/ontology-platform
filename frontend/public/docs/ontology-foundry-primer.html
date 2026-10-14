@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="面向计算机专业新人的本体、Palantir Foundry 与本体驱动智能体系统入门教材" />
+  <title>本体与 Palantir Foundry 扫盲指南</title>
+  <style>
+    :root{--ink:#182638;--muted:#607086;--line:#dbe3ec;--soft:#f4f7fa;--blue:#2468a9;--blue2:#eaf3fb;--navy:#103b62;--green:#20765c;--amber:#9b6517;--red:#a83d45;--paper:#fff;--shadow:0 14px 34px rgba(30,53,78,.1)}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#eef2f6;color:var(--ink);font:16px/1.78 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}a{color:var(--blue);text-decoration:none}a:hover{text-decoration:underline}code,pre{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}.page{display:grid;grid-template-columns:284px minmax(0,1fr);max-width:1540px;margin:auto;min-height:100vh}.side{position:sticky;top:0;height:100vh;padding:28px 20px;background:#122d46;color:#d9e7f3;overflow:auto}.brand{display:flex;align-items:center;gap:11px;padding:0 8px 20px;border-bottom:1px solid rgba(255,255,255,.13)}.brand i{display:grid;place-items:center;width:38px;height:38px;border-radius:8px;background:#fff;color:#164f7e;font-style:normal;font-weight:800}.brand strong{display:block;font-size:17px}.brand span{display:block;color:#9fbed5;font-size:12px}.side nav{padding:19px 0}.side nav a{display:block;padding:7px 10px;border-left:2px solid transparent;color:#c7d9e8;font-size:13px}.side nav a:hover,.side nav a.active{border-left-color:#67b2ed;background:rgba(255,255,255,.07);color:#fff;text-decoration:none}.side footer{padding:14px 8px;border-top:1px solid rgba(255,255,255,.13);color:#93afc4;font-size:12px}.content{min-width:0;background:var(--paper);box-shadow:var(--shadow)}.hero{padding:60px clamp(28px,6vw,86px) 52px;background:linear-gradient(135deg,#fafdff 0,#e9f3fb 68%,#d8eaf8 100%);border-bottom:1px solid #cfdce8}.eyebrow{color:var(--blue);font-size:12px;font-weight:800;letter-spacing:.15em;text-transform:uppercase}.hero h1{max-width:900px;margin:12px 0 16px;font-size:clamp(34px,5vw,58px);line-height:1.13;letter-spacing:-.03em;color:#133958}.hero>p{max-width:850px;margin:0;color:#49647c;font-size:19px}.hero-meta{display:flex;flex-wrap:wrap;gap:9px;margin-top:25px}.hero-meta span{padding:5px 10px;border:1px solid #b8cfdf;border-radius:3px;background:rgba(255,255,255,.75);color:#365a75;font-size:12px}.formula{margin:30px 0 0;padding:18px 20px;border-left:4px solid var(--blue);background:#fff;box-shadow:0 5px 18px rgba(26,72,109,.08);font-weight:700;color:#173f60}.article{padding:0 clamp(28px,6vw,86px) 88px}.section{padding:54px 0;border-bottom:1px solid var(--line);scroll-margin-top:20px}.section:last-child{border:0}.section-number{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:25px;margin-right:9px;border-radius:3px;background:var(--navy);color:#fff;font-size:12px;vertical-align:middle}.section h2{margin:0 0 14px;font-size:29px;line-height:1.25;color:#193c59}.section h3{margin:30px 0 10px;font-size:20px;color:#234f71}.section h4{margin:22px 0 8px}.lead{max-width:920px;color:#425a70;font-size:17px}.callout{margin:20px 0;padding:17px 20px;border:1px solid #bcd3e4;border-left:4px solid var(--blue);background:#f4f9fd}.callout.warn{border-color:#e0c991;border-left-color:#b37a16;background:#fffaf0}.callout.good{border-color:#acd3c5;border-left-color:var(--green);background:#f2faf7}.callout strong{display:block;margin-bottom:3px}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:22px 0}.card{padding:18px;border:1px solid var(--line);border-radius:5px;background:#fff}.card b{display:block;margin-bottom:6px;color:#173f60}.card small{display:block;color:var(--muted);line-height:1.65}.card .tag{display:inline-block;margin-bottom:10px;padding:2px 7px;background:var(--blue2);color:var(--blue);font-size:11px;font-weight:700}.compare{width:100%;margin:19px 0;border-collapse:collapse;font-size:14px}.compare th,.compare td{padding:11px 12px;border:1px solid var(--line);text-align:left;vertical-align:top}.compare th{background:#edf3f8;color:#234a68}.compare tr:nth-child(even) td{background:#fafcfd}.code{overflow:auto;margin:18px 0;padding:17px 19px;border-radius:4px;background:#142b3f;color:#d9e9f5;font-size:13px;line-height:1.75}.mini-code{padding:2px 5px;border-radius:3px;background:#edf2f6;color:#294c66;font-family:monospace;font-size:.9em}.flow{display:grid;grid-template-columns:repeat(5,minmax(115px,1fr));gap:10px;margin:22px 0}.flow>div{position:relative;padding:15px 12px;border:1px solid #c6d5e2;background:#f8fbfd;text-align:center}.flow>div:not(:last-child)::after{content:"→";position:absolute;right:-11px;top:50%;z-index:2;width:20px;color:#4b7597;transform:translateY(-50%);font-weight:800}.flow b{display:block;color:#194b72;font-size:13px}.flow span{display:block;margin-top:5px;color:#6a7c8e;font-size:11px}.layers{display:grid;grid-template-columns:1fr;gap:9px;max-width:820px;margin:22px auto}.layer{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:center;padding:14px 18px;border:1px solid #c8d7e3;background:#fff}.layer b{color:#174b73}.layer span{color:#60758a;font-size:14px}.layer:nth-child(3){border:2px solid #2d76ad;background:#edf6fc}.model-map{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:center;margin:25px 0}.node{padding:14px 10px;border:2px solid #6e9bbb;border-radius:7px;background:#fff;text-align:center}.node b{display:block;color:#16466a}.node span{font-size:11px;color:#6a7d8e}.node.primary{border-color:#2468a9;background:#eef6fc}.edge{text-align:center;color:#4d718b;font-size:12px}.edge::before{content:"↔";display:block;font-size:25px;color:#2f76aa}.pillrow{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}.pill{padding:5px 9px;border:1px solid #c8d8e5;border-radius:999px;background:#f7fafc;color:#3f627e;font-size:12px}.steps{counter-reset:steps;display:grid;gap:10px;margin:22px 0}.step{display:grid;grid-template-columns:38px 1fr;gap:13px;padding:15px 17px;border:1px solid var(--line);background:#fff}.step::before{counter-increment:steps;content:counter(steps);display:grid;place-items:center;width:31px;height:31px;border-radius:50%;background:#1d5f91;color:#fff;font-size:13px;font-weight:800}.step b{display:block;color:#1e4969}.step p{margin:3px 0 0;color:#65778a;font-size:14px}.agent-loop{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;margin:22px 0;gap:12px;align-items:center}.agent-loop .box{min-height:106px;padding:16px;border:1px solid #bed0de;background:#f9fbfd}.agent-loop .box b{display:block;color:#17486d}.agent-loop .box span{font-size:12px;color:#657b8d}.arrow{color:#2d75a9;font-size:26px;font-weight:800}.checklist{columns:2;column-gap:30px;padding-left:20px}.checklist li{break-inside:avoid;margin:7px 0}.glossary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 24px}.glossary div{padding:9px 0;border-bottom:1px solid var(--line)}.glossary b{display:inline-block;min-width:150px;color:#214d6d}.glossary span{color:#5d7083}.sources li{margin:7px 0}.sources a{word-break:break-word}.progress{position:fixed;top:0;left:0;z-index:50;height:3px;width:0;background:#2b80bb}.top{position:fixed;right:24px;bottom:22px;display:grid;place-items:center;width:40px;height:40px;border:1px solid #aac1d2;border-radius:4px;background:#fff;color:#1c608f;box-shadow:0 8px 20px rgba(20,49,73,.14)}.top:hover{text-decoration:none}.print{margin-top:14px;padding:7px 10px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#d8e6f0;cursor:pointer}.footer{padding:30px clamp(28px,6vw,86px);background:#f1f5f8;color:#64788a;font-size:13px}
+    @media(max-width:1020px){.page{grid-template-columns:1fr}.side{position:relative;height:auto;padding:18px}.side nav{display:none}.grid{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr 1fr}.flow>div::after{display:none}.model-map{grid-template-columns:1fr}.edge::before{content:"↕"}.agent-loop{grid-template-columns:1fr}.arrow{transform:rotate(90deg);text-align:center}.checklist{columns:1}}
+    @media(max-width:640px){body{font-size:15px}.hero{padding:38px 22px}.article{padding:0 22px 60px}.grid{grid-template-columns:1fr}.section h2{font-size:25px}.layer{grid-template-columns:1fr}.glossary{grid-template-columns:1fr}.compare{display:block;overflow:auto}.top{right:12px;bottom:12px}}
+    @media print{body{background:#fff}.page{display:block;max-width:none}.side,.progress,.top{display:none}.content{box-shadow:none}.hero{padding:30px 0;background:#fff}.article,.footer{padding-left:0;padding-right:0}.section{break-inside:avoid}.card,.step,.callout{break-inside:avoid}a{color:#17486d;text-decoration:none}}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <div class="page">
+    <aside class="side">
+      <div class="brand"><i>O</i><div><strong>Ontology Primer</strong><span>新人系统扫盲教材</span></div></div>
+      <nav id="toc">
+        <a href="#start">一句话理解</a><a href="#why">为什么需要本体</a><a href="#standards">RDF、OWL 与 SHACL</a><a href="#concepts">核心概念</a><a href="#reuse">组、共享属性与接口</a><a href="#actions">Action 与业务变化</a><a href="#data">数据映射</a><a href="#example">资产运营示例</a><a href="#foundry">Foundry 心智模型</a><a href="#governance">治理与版本</a><a href="#method">建模方法</a><a href="#agents">本体驱动智能体</a><a href="#ai-build">AI 构建本体</a><a href="#safety">安全护栏</a><a href="#mistakes">常见误区</a><a href="#roadmap">平台分期</a><a href="#glossary">术语与资料</a>
+      </nav>
+      <footer>v1.0 · 2026-08-19<br/>依据 W3C 与 Palantir 官方资料整理<br/><button class="print" onclick="window.print()">打印 / 导出 PDF</button></footer>
+    </aside>
+
+    <main class="content">
+      <header class="hero" id="start">
+        <div class="eyebrow">Ontology · Foundry · Agent</div>
+        <h1>本体与 Palantir Foundry 扫盲指南</h1>
+        <p>写给刚毕业的计算机专业学生：从类、实例和关系开始，逐步理解企业为什么用本体连接数据、应用、工作流和智能体。</p>
+        <div class="hero-meta"><span>零业务背景可读</span><span>贯穿资产运营示例</span><span>包含建模与治理细节</span><span>包含 Agent 架构</span></div>
+        <div class="formula">本体 ≈ 类型系统 + 领域模型 + 关系图 + API 契约 + 业务动作 + 权限与版本治理</div>
+      </header>
+
+      <article class="article">
+        <section class="section" id="why">
+          <h2><span class="section-number">01</span>为什么需要本体</h2>
+          <p class="lead">数据库告诉程序数据存在哪里；本体告诉人和机器这些数据在业务世界中是什么、如何连接、允许做什么。</p>
+          <table class="compare"><thead><tr><th>来源系统</th><th>数据结构</th><th>对同一概念的称呼</th></tr></thead><tbody><tr><td>ERP</td><td><code>fixed_asset</code></td><td>固定资产</td></tr><tr><td>工单系统</td><td><code>equipment</code></td><td>设备</td></tr><tr><td>IoT</td><td><code>device</code></td><td>终端</td></tr><tr><td>财务系统</td><td><code>capital_item</code></td><td>资本化项目</td></tr></tbody></table>
+          <div class="grid"><div class="card"><span class="tag">问题 1</span><b>身份不一致</b><small>asset_id、equipment_code、device_sn 是否指同一实体？</small></div><div class="card"><span class="tag">问题 2</span><b>语义不一致</b><small>3、REPAIRING、offline 是否都是“维修中”？</small></div><div class="card"><span class="tag">问题 3</span><b>操作不受控</b><small>谁能把设备改为报废？需要什么条件与审批？</small></div></div>
+          <div class="flow"><div><b>原始系统</b><span>ERP、CRM、IoT、文档</span></div><div><b>数据工程</b><span>清洗、主数据、管道</span></div><div><b>本体</b><span>对象、关系、动作、规则</span></div><div><b>应用</b><span>搜索、分析、工作流</span></div><div><b>智能体</b><span>理解、规划、调用工具</span></div></div>
+          <div class="callout good"><strong>核心价值</strong>本体是上游数据变化与下游应用变化之间的稳定业务契约。同一份模型可以同时服务数据、应用、自动化和智能体。</div>
+        </section>
+
+        <section class="section" id="standards">
+          <h2><span class="section-number">02</span>RDF、OWL 与 SHACL：学术基础</h2>
+          <h3>RDF：用三元组写事实</h3>
+          <pre class="code">资产 A-1001  — 位于 — 上海仓库
+资产 A-1001  — 状态 — 维修中
+维修工单 WO-09 — 针对 — 资产 A-1001</pre>
+          <p>RDF 用“主语—谓词—宾语”表达事实；RDF Schema 提供类、实例、子类、属性、domain 和 range 等基础语义。</p>
+          <div class="grid"><div class="card"><b>RDF / RDFS</b><small>表达资源、三元组、类、属性与基础层级。</small></div><div class="card"><b>OWL</b><small>表达等价、互斥、限制、传递性等更强语义，并支持推理。</small></div><div class="card"><b>SHACL</b><small>用 Shape 验证节点和边是否满足数据类型、数量与结构约束。</small></div></div>
+          <div class="callout warn"><strong>开放世界与封闭世界</strong>OWL 中“没有记录”通常代表未知，不自动代表假；数据库业务校验通常把缺失必填值视为不合格。企业运营本体常吸收语义网思想，同时采用更确定的数据映射、校验、权限和版本机制。</div>
+          <p>因此 Palantir 式本体不是简单的 RDF 图，而是一套面向运营的语义与行动层。</p>
+        </section>
+
+        <section class="section" id="concepts">
+          <h2><span class="section-number">03</span>核心概念：从类型到真实对象</h2>
+          <div class="grid"><div class="card"><b>对象类型 Object Type</b><small>一类业务实体、事件、交易或工作对象的定义，例如 Asset、Order。</small></div><div class="card"><b>对象 Object</b><small>某个类型的具体实例，例如资产 A-1001。</small></div><div class="card"><b>属性 Property</b><small>对象的特征，包含稳定 API 名称、类型、枚举、来源与状态。</small></div><div class="card"><b>关系类型 Link Type</b><small>两类对象之间有业务含义的连接契约。</small></div><div class="card"><b>关系 Link</b><small>两个具体对象之间的一次连接。</small></div><div class="card"><b>Action Type</b><small>创建、修改、删除对象或关系的受控业务动作。</small></div></div>
+          <h3>对象类型并不只是“物”</h3>
+          <div class="pillrow"><span class="pill">人：员工、客户</span><span class="pill">地点：仓库、门店</span><span class="pill">实体：资产、产品</span><span class="pill">交易：订单、付款</span><span class="pill">事件：告警、质检</span><span class="pill">工作项：工单、案件</span><span class="pill">决策：排产、补货建议</span></div>
+          <h3>主键与标题属性</h3>
+          <pre class="code">对象类型：Asset
+主键属性：assetId = A-1001      // 机器稳定唯一识别
+标题属性：assetName = 一号循环泵 // 人类快速识别</pre>
+          <p>主键必须唯一、非空、确定且长期稳定。随机行号或同步后变化的标识会让编辑和关系失效。</p>
+          <h3>关系是双向语义</h3>
+          <div class="model-map"><div class="node primary"><b>Asset</b><span>资产</span></div><div class="edge">locatedAt / assets</div><div class="node"><b>Location</b><span>地点</span></div><div class="edge">belongsTo / assets</div><div class="node"><b>Department</b><span>部门</span></div></div>
+          <p>Palantir 的 Link Type 本身是双向的，两侧分别拥有显示名称和 API 名称。数据库外键的存储方向不应限制业务遍历方向。</p>
+          <h3>基数与关系对象化</h3>
+          <table class="compare"><thead><tr><th>模式</th><th>使用场景</th><th>例子</th></tr></thead><tbody><tr><td>一对一</td><td>两边最多一个</td><td>员工 ↔ 当前工位</td></tr><tr><td>一对多 / 多对一</td><td>一侧可关联多个</td><td>部门 ↔ 员工</td></tr><tr><td>多对多</td><td>双方都可多个</td><td>供应商 ↔ 产品</td></tr><tr><td>关系对象化</td><td>关系拥有日期、角色、金额或生命周期</td><td>员工 → 项目任职 → 项目</td></tr></tbody></table>
+        </section>
+
+        <section class="section" id="reuse">
+          <h2><span class="section-number">04</span>组、共享属性、接口与继承</h2>
+          <table class="compare"><thead><tr><th>能力</th><th>解决的问题</th><th>不要误解为</th></tr></thead><tbody><tr><td>对象类型组</td><td>分类、发现、过滤和图谱聚合</td><td>不会自动产生共同属性</td></tr><tr><td>共享属性</td><td>集中复用属性名称、类型和说明</td><td>共享的是元数据，不是实例值</td></tr><tr><td>接口</td><td>让多种具体对象遵守同一结构和能力契约</td><td>接口不能直接实例化</td></tr><tr><td>子类 / 继承</td><td>表达“所有 A 都是 B”的语义</td><td>不适合为了代码复用而无限加深</td></tr></tbody></table>
+          <div class="callout"><strong>接口例子：WorkItem</strong>MaintenanceOrder、ServiceTicket 和 ApprovalTask 都实现 status、assignee、dueDate。应用和智能体便能对“所有工作项”进行通用查询和动作。</div>
+          <p>实务选择：仅导航使用组；统一一个字段使用共享属性；统一结构与能力使用接口；真正需要语义推理时才使用子类关系。</p>
+        </section>
+
+        <section class="section" id="actions">
+          <h2><span class="section-number">05</span>Action：从“名词”走向“业务变化”</h2>
+          <p class="lead">对象、属性和关系描述现在的世界；Action 描述谁可以在什么条件下，以什么参数把世界改变成什么样。</p>
+          <div class="flow"><div><b>参数</b><span>asset、nextStatus、reason</span></div><div><b>提交条件</b><span>身份、对象状态、参数</span></div><div><b>规则</b><span>创建/修改对象与关系</span></div><div><b>副作用</b><span>通知、Webhook、调度</span></div><div><b>审计</b><span>调用者、输入、结果</span></div></div>
+          <pre class="code">action: changeAssetStatus
+parameters:
+  asset: Asset
+  nextStatus: AssetStatus
+  reason: string
+rules:
+  - set asset.status = nextStatus
+  - set asset.lastUpdatedAt = currentTime
+submissionCriteria:
+  - currentUser in AssetAdministrators
+  - asset.status != 已报废</pre>
+          <div class="callout good"><strong>对智能体尤其重要</strong>让 LLM 选择窄而明确的 Action，不给它任意 SQL 或数据库写权限。Action 统一执行权限、业务条件、影响预览和审计。</div>
+        </section>
+
+        <section class="section" id="data">
+          <h2><span class="section-number">06</span>数据如何进入本体</h2>
+          <p>本体不是给数据库表换中文名。对象类型必须和真实数据建立可追踪、可验证的绑定。</p>
+          <pre class="code">dataset.asset_master.asset_code  → Asset.assetId（主键）
+dataset.asset_master.asset_name  → Asset.assetName（标题）
+dataset.asset_master.dept_code   → Asset.belongsToDepartment
+dataset.asset_state.state_code   → Asset.status</pre>
+          <div class="grid"><div class="card"><b>数据源</b><small>数据集、视图、API、事件流及其负责人和刷新频率。</small></div><div class="card"><b>字段映射</b><small>类型转换、枚举转换、空值、默认值、主键和标题键。</small></div><div class="card"><b>关系来源</b><small>外键、关联表或拥有元数据的 backing object。</small></div><div class="card"><b>实体解析</b><small>多来源记录的匹配、合并、冲突策略与人工复核。</small></div><div class="card"><b>质量与索引</b><small>唯一性、完整性、新鲜度、覆盖率和索引错误。</small></div><div class="card"><b>血缘与安全</b><small>知道数据从哪里来、谁能看、谁能修改。</small></div></div>
+        </section>
+
+        <section class="section" id="example">
+          <h2><span class="section-number">07</span>资产运营本体：一张可用的业务世界图</h2>
+          <div class="model-map"><div class="node primary"><b>Asset</b><span>资产</span></div><div class="edge">concerns / orders</div><div class="node"><b>MaintenanceOrder</b><span>维修工单</span></div><div class="edge">assignee / assignedOrders</div><div class="node"><b>Employee</b><span>员工</span></div></div>
+          <div class="model-map"><div class="node"><b>Department</b><span>部门</span></div><div class="edge">assets / belongsTo</div><div class="node primary"><b>Asset</b><span>资产</span></div><div class="edge">locatedAt / assets</div><div class="node"><b>Location</b><span>地点</span></div></div>
+          <table class="compare"><thead><tr><th>层面</th><th>能够支持的任务</th></tr></thead><tbody><tr><td>查询</td><td>上海仓库有哪些处于维修中的高价值资产？</td></tr><tr><td>分析</td><td>过去 90 天重复维修三次以上的设备有哪些？</td></tr><tr><td>工作流</td><td>告警 → 诊断 → 建工单 → 指派 → 完工 → 回写状态</td></tr><tr><td>智能体</td><td>解释停机原因、推荐处置方案、经确认后创建工单</td></tr><tr><td>治理</td><td>修改 Asset.status 前显示受影响的 Action、应用和映射</td></tr></tbody></table>
+        </section>
+
+        <section class="section" id="foundry">
+          <h2><span class="section-number">08</span>Palantir Foundry 的本体心智模型</h2>
+          <div class="layers"><div class="layer"><b>业务体验层</b><span>Object Explorer、分析、应用、自动化、Agents</span></div><div class="layer"><b>开发与逻辑层</b><span>Functions、SDK、模型、AIP Logic</span></div><div class="layer"><b>Ontology 运营层</b><span>对象、关系、Action、接口、权限、治理</span></div><div class="layer"><b>数据工程层</b><span>数据集、虚拟表、管道、索引、血缘</span></div><div class="layer"><b>来源系统</b><span>ERP、CRM、IoT、文件、外部 API</span></div></div>
+          <h3>六类核心资源</h3>
+          <div class="grid"><div class="card"><b>Object types</b><small>具体业务事物。</small></div><div class="card"><b>Link types</b><small>双向业务关系。</small></div><div class="card"><b>Action types</b><small>受控业务动作。</small></div><div class="card"><b>Interfaces</b><small>抽象结构和能力契约。</small></div><div class="card"><b>Shared properties</b><small>集中复用属性元数据。</small></div><div class="card"><b>Object type groups</b><small>分类、发现和图谱导航。</small></div></div>
+          <h3>典型建模操作</h3>
+          <div class="steps"><div class="step"><div><b>选择本体上下文</b><p>在当前 Space / Ontology 中搜索已有资源，优先复用。</p></div></div><div class="step"><div><b>创建对象并映射数据</b><p>选择数据源、属性、主键、标题键和元数据。</p></div></div><div class="step"><div><b>创建关系与 Action</b><p>定义双向语义、基数、参数、规则和提交条件。</p></div></div><div class="step"><div><b>在分支预览</b><p>检查数据、索引、权限、接口实现和下游影响。</p></div></div><div class="step"><div><b>Proposal 审查与合并</b><p>查看 Diff、评审任务、批准并合入 main。</p></div></div></div>
+          <div class="callout warn"><strong>多个本体的边界</strong>不同 Ontology 之间不能直接建立 Link Type。跨域对象若需要正式语义关系，通常应进入共同或共享 Ontology；业务域内部可用对象类型组划分。</div>
+        </section>
+
+        <section class="section" id="governance">
+          <h2><span class="section-number">09</span>治理：本体是公共契约</h2>
+          <div class="grid"><div class="card"><b>生命周期</b><small>试验、启用、核心推荐、弃用、示例。</small></div><div class="card"><b>模型权限</b><small>谁能查看、编辑和管理资源定义。</small></div><div class="card"><b>实例权限</b><small>谁能看到哪些对象和属性、运行哪些动作。</small></div><div class="card"><b>Branch</b><small>隔离建模变更和预览数据。</small></div><div class="card"><b>Proposal</b><small>像 Pull Request 一样展示 Diff、任务和评审。</small></div><div class="card"><b>影响分析</b><small>变更前查找应用、SDK、Agent、映射和 Action 消费者。</small></div></div>
+          <h3>发布前检查</h3>
+          <ul class="checklist"><li>每个对象恰好一个稳定主键</li><li>标题属性真实存在</li><li>API 名称唯一且稳定</li><li>关系端点和基数正确</li><li>接口实现满足契约</li><li>共享属性类型一致</li><li>Action 参数与规则匹配</li><li>提交条件有清晰失败信息</li><li>数据样本、索引和权限预览通过</li><li>没有破坏下游消费者</li></ul>
+        </section>
+
+        <section class="section" id="method">
+          <h2><span class="section-number">10</span>可靠的手工建模方法</h2>
+          <div class="steps"><div class="step"><div><b>从问题和动作开始</b><p>先写 5～10 个必须回答的问题和 3～5 个必须完成的动作。</p></div></div><div class="step"><div><b>建立业务词汇表</b><p>给出定义、反例、同义词、负责人和来源。</p></div></div><div class="step"><div><b>识别对象与身份</b><p>寻找有稳定身份和独立生命周期的实体、事件与工作项。</p></div></div><div class="step"><div><b>设计最小属性集</b><p>明确类型、枚举、敏感级别、来源与说明。</p></div></div><div class="step"><div><b>只建立有意义的关系</b><p>每条关系都应能回答一个自然业务问题。</p></div></div><div class="step"><div><b>复用与抽象</b><p>使用组、共享属性和接口，但避免过早抽象。</p></div></div><div class="step"><div><b>设计受控 Action</b><p>明确参数、规则、条件、影响和审计。</p></div></div><div class="step"><div><b>绑定数据与真实样本</b><p>检查唯一性、空值、枚举、覆盖率和新鲜度。</p></div></div><div class="step"><div><b>小范围发布</b><p>让一个真实应用或智能体消费，再根据反馈演进。</p></div></div></div>
+        </section>
+
+        <section class="section" id="agents">
+          <h2><span class="section-number">11</span>本体如何驱动智能体</h2>
+          <p class="lead">本体把智能体从“猜表名、拼 SQL 的聊天模型”，升级为“理解业务对象、沿关系查询、通过受控动作办事的数字员工”。</p>
+          <div class="grid"><div class="card"><span class="tag">角色 1</span><b>消费本体</b><small>读取对象、属性、关系、查询和 Action 契约。</small></div><div class="card"><span class="tag">角色 2</span><b>辅助建模</b><small>从文件、Schema 和样例中提出有证据的候选变更。</small></div><div class="card"><span class="tag">角色 3</span><b>操作本体</b><small>在权限、条件、确认和审计约束下调用 Action。</small></div></div>
+          <div class="agent-loop"><div class="box"><b>用户意图</b><span>“为 A-1001 创建高优先级维修工单”</span></div><div class="arrow">→</div><div class="box"><b>Agent 规划</b><span>查询资产、已有工单、可用动作和权限</span></div><div class="arrow">→</div><div class="box"><b>Ontology 工具</b><span>queryObjects / traverseLinks / createMaintenanceOrder</span></div></div>
+          <div class="callout"><strong>读写分离</strong>读路径可以搜索、过滤、聚合和遍历；写路径只调用已发布 Action，执行权限与提交条件，高影响动作要求人工确认，并记录审计。</div>
+          <h3>本体与 RAG</h3>
+          <table class="compare"><thead><tr><th>RAG / 向量检索</th><th>本体</th></tr></thead><tbody><tr><td>找到相关非结构化文本和证据</td><td>表达结构化业务对象、关系和动作</td></tr><tr><td>相似度不等于正式业务关系</td><td>关系具有类型、端点和基数</td></tr><tr><td>回答“依据在哪里”</td><td>回答“对象是什么、怎么连接、能做什么”</td></tr></tbody></table>
+          <p><strong>组合方式：</strong>RAG 找证据，本体提供结构，Query / Function 计算，Action 执行改变。</p>
+          <h3>Palantir AIP / Agents</h3>
+          <p>Foundry Agent 通常绑定选定 Ontology，通过 OSDK、Ontology MCP 和 Palantir MCP 获得有范围的对象、查询和 Action 工具。发布后 Agent 拥有 Ontology binding 与 API 名称，可从 Workshop、Automate、SDK 或 Ontology Action 触发。</p>
+        </section>
+
+        <section class="section" id="ai-build">
+          <h2><span class="section-number">12</span>AI 如何驱动本体构建</h2>
+          <div class="flow"><div><b>Evidence Set</b><span>文件、表、API、术语</span></div><div><b>候选抽取</b><span>对象、属性、关系、动作</span></div><div><b>对齐去重</b><span>复用、扩展、冲突</span></div><div><b>Proposal</b><span>证据、置信度、Diff</span></div><div><b>评审发布</b><span>人工确认、校验、审计</span></div></div>
+          <h3>AI 适合完成</h3>
+          <ul class="checklist"><li>发现领域名词、事件和动作</li><li>推断候选对象与属性</li><li>生成说明、同义词和命名建议</li><li>发现重复概念和接口机会</li><li>提出关系、基数和枚举候选</li><li>建议字段映射</li><li>解释 Diff 和影响</li><li>生成校验规则与测试数据</li></ul>
+          <h3>必须由人或确定性政策决定</h3>
+          <ul class="checklist"><li>最终主键和主数据身份</li><li>高影响实体合并</li><li>敏感数据权限</li><li>Action 执行授权</li><li>删除和破坏性迁移</li><li>没有证据的业务规则</li><li>正式版本发布</li></ul>
+          <div class="callout warn"><strong>AI 输出是 Proposal，不是事实</strong>每个候选资源都应保存来源、原文证据、推断理由、置信度、与现有资源的冲突以及审查状态。</div>
+        </section>
+
+        <section class="section" id="safety">
+          <h2><span class="section-number">13</span>智能体安全护栏</h2>
+          <div class="grid"><div class="card"><b>最小权限</b><small>只暴露完成任务需要的对象、属性、查询和 Action。</small></div><div class="card"><b>结构化工具</b><small>明确类型、枚举、说明、失败行为和幂等性。</small></div><div class="card"><b>高影响确认</b><small>展示目标对象、参数、预计变化、下游影响和可撤销性。</small></div><div class="card"><b>内容不可信</b><small>文档、网页和属性值不能覆盖系统政策或授予权限。</small></div><div class="card"><b>完整审计</b><small>记录模型、提示词、对象、工具参数、确认和执行结果。</small></div><div class="card"><b>持续 Evals</b><small>评估查询路径、工具选择、参数、拒绝和确认策略。</small></div></div>
+          <pre class="code">危险工具：execute_sql(sql)
+
+推荐工具：retire_asset(
+  assetId: string,
+  reason: string,
+  effectiveDate: date
+)
+→ 权限检查 → 业务条件 → 影响预览 → 人工确认 → 执行 → 审计</pre>
+        </section>
+
+        <section class="section" id="mistakes">
+          <h2><span class="section-number">14</span>八个常见误区</h2>
+          <div class="grid"><div class="card"><b>本体就是知识图谱</b><small>图谱强调实体关系数据；本体强调类型、约束、契约和治理，运营本体还包含动作。</small></div><div class="card"><b>一张表对应一个对象</b><small>表是存储结构，对象是业务概念；两者不是一一对应。</small></div><div class="card"><b>能 Join 就建关系</b><small>关系必须回答业务问题，否则只会增加噪声。</small></div><div class="card"><b>节点越多越专业</b><small>质量取决于是否支持稳定的问题和动作。</small></div><div class="card"><b>API 名称可以随便改</b><small>它是应用、SDK、自动化和 Agent 的公共契约。</small></div><div class="card"><b>AI 可自动发布本体</b><small>AI 适合生成候选，身份、权限和高影响动作必须治理。</small></div><div class="card"><b>有本体就不需数据治理</b><small>重复主键、错误枚举和过期数据仍需工程机制。</small></div><div class="card"><b>Agent 可以直接写库</b><small>企业写路径必须收敛到受控 Action。</small></div></div>
+        </section>
+
+        <section class="section" id="roadmap">
+          <h2><span class="section-number">15</span>本体平台的推荐分期</h2>
+          <table class="compare"><thead><tr><th>阶段</th><th>目标</th><th>核心范围</th></tr></thead><tbody><tr><td><b>一期</b><br/>可信手工内核</td><td>本体可建、可查、可验证、可版本化</td><td>六类核心资源、结构化映射、实例预览、图谱、Diff、版本和审计</td></tr><tr><td><b>二期</b><br/>AI 建模</td><td>从证据生成可审查的候选变更</td><td>Evidence Set、抽取对齐、Proposal、引用、置信度和建模 Eval</td></tr><tr><td><b>三期</b><br/>Agent Runtime</td><td>让 Agent 安全查询并执行企业动作</td><td>Query、Function、Action、权限、确认、审计、自动化和在线评估</td></tr></tbody></table>
+          <div class="callout good"><strong>产品原则</strong>先把手工建模和治理内核做正确，再让 AI 提建议，最后让 Agent 执行动作。AI 能力不能替代元模型、权限和版本基础。</div>
+        </section>
+
+        <section class="section" id="glossary">
+          <h2><span class="section-number">16</span>术语速查与官方资料</h2>
+          <div class="glossary"><div><b>Ontology</b><span>机器可理解、可执行、可治理的业务世界模型</span></div><div><b>Object Type</b><span>一类业务事物的类型定义</span></div><div><b>Object</b><span>对象类型的具体实例</span></div><div><b>Property</b><span>对象的特征</span></div><div><b>Primary / Title Key</b><span>机器唯一标识 / 人类显示标题</span></div><div><b>Link Type</b><span>双向业务关系契约</span></div><div><b>Interface</b><span>抽象结构和能力契约</span></div><div><b>Shared Property</b><span>集中复用的属性元数据</span></div><div><b>Object Type Group</b><span>分类、过滤和发现集合</span></div><div><b>Action Type</b><span>受控业务动作契约</span></div><div><b>Submission Criteria</b><span>动作提交前必须满足的条件</span></div><div><b>Backing Datasource</b><span>提供真实对象和关系数据的来源</span></div><div><b>Proposal</b><span>等待比较、校验和评审的变更集合</span></div><div><b>OSDK / OMCP</b><span>本体开发 SDK / 本体 Agent 工具协议服务</span></div></div>
+          <h3>W3C</h3>
+          <ul class="sources"><li><a href="https://www.w3.org/TR/rdf11-concepts/">RDF 1.1 Concepts</a></li><li><a href="https://www.w3.org/TR/rdf-schema/">RDF Schema 1.1</a></li><li><a href="https://www.w3.org/TR/owl2-primer/">OWL 2 Primer</a></li><li><a href="https://www.w3.org/TR/shacl/">SHACL</a></li></ul>
+          <h3>Palantir Foundry / AIP</h3>
+          <ul class="sources"><li><a href="https://www.palantir.com/docs/foundry/ontology/overview">Ontology overview</a></li><li><a href="https://www.palantir.com/docs/foundry/ontologies/ontologies-overview">Ontologies overview</a></li><li><a href="https://www.palantir.com/docs/foundry/object-link-types/create-object-type/">Create an object type</a></li><li><a href="https://www.palantir.com/docs/foundry/object-link-types/link-types-overview">Link types overview</a></li><li><a href="https://www.palantir.com/docs/foundry/object-link-types/shared-property-overview">Shared properties</a></li><li><a href="https://www.palantir.com/docs/foundry/interfaces/interface-overview">Interfaces overview</a></li><li><a href="https://www.palantir.com/docs/foundry/action-types/rules">Action rules</a></li><li><a href="https://www.palantir.com/docs/foundry/action-types/submission-criteria">Submission criteria</a></li><li><a href="https://www.palantir.com/docs/foundry/object-permissioning/ontology-permissions">Ontology permissions</a></li><li><a href="https://www.palantir.com/docs/foundry/ontologies/review-ontology-proposals">Review ontology proposals</a></li><li><a href="https://www.palantir.com/docs/foundry/aip">AIP overview</a></li><li><a href="https://www.palantir.com/docs/foundry/agents/overview">Agents overview</a></li><li><a href="https://www.palantir.com/docs/foundry/ontology-mcp/sample-architecture">Ontology MCP architecture</a></li></ul>
+        </section>
+      </article>
+
+      <footer class="footer"><strong>最后记住：</strong>LLM 负责理解与规划，本体负责世界模型，Query / Function 负责确定性读取与计算，Action 负责受控写入，Policy 与 Audit 负责边界和追溯。</footer>
+    </main>
+  </div>
+  <a class="top" href="#start" aria-label="返回顶部">↑</a>
+  <script>
+    const progress=document.getElementById('progress');const links=[...document.querySelectorAll('#toc a')];const sections=links.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    const refresh=()=>{const h=document.documentElement.scrollHeight-innerHeight;progress.style.width=(h?scrollY/h*100:0)+'%';let current=sections[0];for(const s of sections){if(s.getBoundingClientRect().top<160)current=s}links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')==='#'+current.id))};
+    addEventListener('scroll',refresh,{passive:true});refresh();
+  </script>
+</body>
+</html>

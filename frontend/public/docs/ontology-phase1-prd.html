@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>企业本体 Studio 一期增强版产品需求文档</title>
+  <style>
+    :root{--ink:#14283d;--sub:#5f7388;--line:#d7e0e9;--blue:#2169a8;--blue2:#eaf3fb;--green:#2f7955;--amber:#9a6a18;--paper:#fff;--wash:#f3f6f9;--navy:#173b5d}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:var(--wash);font-family:Inter,"PingFang SC","Microsoft YaHei",Arial,sans-serif;line-height:1.65}a{color:inherit}.shell{display:grid;grid-template-columns:250px minmax(0,1fr);min-height:100vh}.side{position:sticky;top:0;height:100vh;padding:30px 23px;color:#d9e7f4;background:var(--navy);overflow-y:auto}.brand{display:flex;align-items:center;gap:10px;margin-bottom:27px}.brand i{width:34px;height:34px;display:grid;place-items:center;background:#2e75af;border-radius:4px;font-style:normal;font-weight:800}.brand strong{display:block;font-size:14px}.brand span{display:block;color:#8fb0cc;font-size:9px;letter-spacing:.08em}.side h4{margin:22px 7px 7px;color:#84a5c2;font-size:9px;letter-spacing:.12em;text-transform:uppercase}.side nav a{display:block;padding:7px 9px;color:#c7d9e9;border-radius:4px;font-size:11px;text-decoration:none}.side nav a:hover{color:#fff;background:rgba(255,255,255,.08)}.side footer{margin-top:28px;padding:12px;border:1px solid rgba(255,255,255,.13);color:#a9c3d9;font-size:9px}.main{min-width:0}.hero{padding:54px 6vw 46px;color:#fff;background:linear-gradient(120deg,#173b5d,#245f91 60%,#2b78b5);border-bottom:4px solid #68a5d6}.hero .kicker{font-size:10px;font-weight:800;letter-spacing:.16em}.hero h1{max-width:900px;margin:11px 0 8px;font-size:34px;line-height:1.25}.hero p{max-width:800px;margin:0;color:#d9e9f6;font-size:14px}.meta{display:flex;flex-wrap:wrap;gap:9px;margin-top:22px}.meta span{padding:5px 9px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.2);border-radius:3px;font-size:9px}.content{max-width:1220px;margin:0 auto;padding:28px 3.5vw 70px}.section{margin:0 0 20px;padding:24px 27px;background:var(--paper);border:1px solid var(--line);border-radius:5px;box-shadow:0 3px 12px rgba(25,52,78,.035)}.section>h2{display:flex;align-items:center;gap:9px;margin:0 0 17px;font-size:20px}.section>h2:before{content:"";width:4px;height:20px;background:#3478b2}.section h3{margin:24px 0 10px;font-size:14px}.section p{color:var(--sub);font-size:12px}.lead{font-size:14px!important;line-height:1.8}.grid2,.grid3,.stat-grid{display:grid;gap:12px}.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.stat-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.card,.stat{padding:15px;background:#f8fafc;border:1px solid #dde5ec;border-radius:4px}.card h3,.card strong{margin:0;color:#29445d;font-size:12px}.card p{margin:6px 0 0;font-size:10.5px}.stat strong{display:block;color:#1f5f96;font-size:23px}.stat span{color:#6f8193;font-size:9px}.tag{display:inline-block;padding:2px 6px;border:1px solid;border-radius:8px;font-size:8px;font-weight:700}.p0{color:#8b4b20;background:#fff2e7;border-color:#e8c6ab}.p1{color:#286849;background:#edf7f1;border-color:#c7e2d3}.out{color:#657487;background:#f0f3f6;border-color:#d8e0e7}.flow{display:flex;align-items:stretch;gap:7px;margin:14px 0;overflow-x:auto}.flow div{min-width:145px;flex:1;padding:13px;background:#f7fafc;border:1px solid #d6e0e9;border-radius:4px}.flow b,.flow span{display:block}.flow b{font-size:11px}.flow span{margin-top:4px;color:#748799;font-size:9px}.flow i{align-self:center;color:#88a0b5;font-style:normal}.scope-list{margin:0;padding:0;list-style:none}.scope-list li{position:relative;margin:7px 0;padding-left:18px;color:#4e657a;font-size:11px}.scope-list li:before{position:absolute;left:0;content:"✓";color:#2d8057;font-weight:800}.scope-list.outscope li:before{content:"—";color:#9b6b27}.figure{margin:18px 0 8px;padding:10px;background:#eef2f6;border:1px solid #d4dee7;border-radius:5px}.figure img{display:block;width:100%;max-height:660px;object-fit:contain;object-position:top;background:#fff;border:1px solid #cbd6e1}.figure figcaption{display:flex;justify-content:space-between;gap:20px;padding:9px 4px 1px;color:#687d90;font-size:9.5px}.figure figcaption b{color:#315a7c}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:10.5px}th{padding:9px 10px;color:#4a6278;background:#edf2f6;border:1px solid #d5dfe8;text-align:left;white-space:nowrap}td{padding:9px 10px;border:1px solid #dce4eb;vertical-align:top}td p{margin:0!important;font-size:10.5px!important}code{font:9px ui-monospace,SFMono-Regular,Menlo,monospace;color:#335b7d}.rule{display:flex;gap:10px;margin:8px 0;padding:10px 12px;background:#f8fafc;border-left:3px solid #5b8bb5}.rule b{min-width:94px;font-size:10px}.rule span{color:#61768a;font-size:10px}.milestone{position:relative;padding-left:21px}.milestone:before{position:absolute;top:8px;bottom:8px;left:5px;width:1px;background:#cbd8e3;content:""}.milestone>div{position:relative;margin:12px 0;padding:13px 15px;background:#f8fafc;border:1px solid #d8e2ea}.milestone>div:before{position:absolute;top:18px;left:-21px;width:11px;height:11px;background:#3d7fb6;border:3px solid #e6f0f7;border-radius:50%;content:""}.milestone b{font-size:11px}.milestone span{display:block;margin-top:4px;color:#6d8194;font-size:9.5px}.callout{padding:14px 16px;color:#31536c;background:#edf6fb;border:1px solid #c9ddea;border-radius:4px;font-size:11px}.callout strong{color:#204e72}.footer{padding:24px;text-align:center;color:#75889a;font-size:9px}.print-only{display:none}@media(max-width:900px){.shell{grid-template-columns:1fr}.side{position:relative;height:auto}.side nav{display:none}.hero{padding:38px 25px}.hero h1{font-size:27px}.content{padding:18px}.grid2,.grid3,.stat-grid{grid-template-columns:1fr}.section{padding:20px}.flow{display:grid;grid-template-columns:1fr}.flow i{display:none}}@media print{body{background:#fff}.shell{display:block}.side{display:none}.hero{padding:30px;color:#132b40;background:#fff;border-bottom:2px solid #2f6e9f}.hero p{color:#566d81}.meta span{color:#445d72;border-color:#cbd8e3}.content{max-width:none;padding:15px}.section{break-inside:avoid;box-shadow:none}.figure{break-inside:avoid}.print-only{display:block}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><i>O</i><div><strong>本体建模 Studio</strong><span>PHASE 1 · PRD</span></div></div>
+    <h4>文档导航</h4>
+    <nav>
+      <a href="#summary">1. 产品定义</a><a href="#scope">2. 一期边界</a><a href="#users">3. 用户与场景</a><a href="#ia">4. 信息架构</a><a href="#requirements">5. 功能需求</a><a href="#rules">6. 建模规则</a><a href="#experience">7. 交互规范</a><a href="#nonfunctional">8. 非功能需求</a><a href="#acceptance">9. 验收标准</a><a href="#plan">10. 实施计划</a><a href="#risks">11. 风险与二期边界</a>
+    </nav>
+    <footer>版本：v1.9<br/>状态：研发落地演示基线<br/>日期：2026-09-04<br/>负责人：本体平台产品组</footer>
+  </aside>
+  <main class="main">
+    <header class="hero">
+      <div class="kicker">PRODUCT REQUIREMENTS DOCUMENT</div>
+      <h1>智能体平台 · 企业本体 Studio 一期增强版 PRD</h1>
+      <p>交付可手工维护、可由文件智能生成、可审核发布、可供 Agent 查询与受控执行的企业业务语义层；产品逻辑对齐 Foundry 的 Ontology、Proposal 与 Action 体系。</p>
+      <div class="meta"><span>一期增强版：手工 + AI 协同</span><span>基线：Foundry 式 Proposal</span><span>技术基线：FastAPI + SQLite + React</span><span>模型：DeepSeek V4 Flash</span><span>原型地址：127.0.0.1:8021</span></div>
+    </header>
+    <div class="content">
+      <section class="section" id="summary">
+        <h2>产品定义与成功标准</h2>
+        <p class="lead">一期增强版不是“画一张概念图”，而是把 Schema、Mapping、Logic、Action、Security 与 Runtime 串成可治理闭环。文件和领域资料先成为 Evidence，模型只生成增量 Proposal，人工逐项决策后合并到工作状态，再经校验发布为正式版本。</p>
+        <div class="stat-grid"><div class="stat"><strong>1</strong><span>统一的本体工作台</span></div><div class="stat"><strong>14+</strong><span>企业语义资源类型</span></div><div class="stat"><strong>15</strong><span>模板工作表完整映射</span></div><div class="stat"><strong>1</strong><span>受控 Agent 运行时</span></div></div>
+        <h3>完成定义</h3>
+        <div class="grid3"><div class="card"><strong>可以建</strong><p>业务域、主题域、对象、属性、关系、接口、规则和动作均能完整增删改查。</p></div><div class="card"><strong>可以管</strong><p>支持多本体隔离、生命周期、工作状态、校验、审查、发布和活动记录。</p></div><div class="card"><strong>可以运行</strong><p>场景可组装对象、关系、数据映射、规则和受控动作，并生成可审计轨迹。</p></div></div>
+      </section>
+
+      <section class="section" id="scope">
+        <h2>一期增强版范围与明确边界</h2>
+        <div class="grid2">
+          <div class="card"><h3><span class="tag p0">一期必须</span> 企业本体完整闭环</h3><ul class="scope-list"><li>多本体目录与切换，业务域、主题域和对象直接归属</li><li>对象、属性、关系、独立接口、实例和模型图谱</li><li>数据源选择、对象/属性/关系映射与样例测试</li><li>确定性规则 / 函数、动作、系统能力与执行映射</li><li>可编排业务场景、人工确认、权限、评审、版本与审计</li><li>XLSX、CSV、JSON、DOCX、Markdown、TXT、PDF 资料接入</li><li>DeepSeek V4 Flash 增量建模建议，逐项决策后合并</li><li>本体智能体查询、关系穿透、规则轨迹和写操作确认演示</li></ul></div>
+          <div class="card"><h3><span class="tag out">生产化阶段</span> 原型不伪装的边界</h3><ul class="scope-list outscope"><li>真实生产数据的持续同步、回放和大规模对象索引</li><li>企业级 SSO、行列级授权策略下推与多租户隔离</li><li>Action 对生产业务系统的真实写入、补偿与审批流</li><li>多人实时分支协作、复杂三方合并和语义冲突自动消解</li><li>OCR、版面分析、向量检索与大规模异步文档解析集群</li><li>高可用元数据仓库、图计算集群和跨地域灾备</li></ul></div>
+        </div>
+        <div class="callout"><strong>边界原则：</strong>智能能力可以生成候选资源，但只能写入独立 Proposal；任何模型建议都必须保留证据、置信度和理由，经过人工决策与校验后才能成为正式本体。模型密钥只从环境变量读取。</div>
+      </section>
+
+      <section class="section" id="users">
+        <h2>目标用户与关键场景</h2>
+        <div class="grid3"><div class="card"><h3>本体管理员</h3><p>创建业务本体、维护命名空间、审查工作状态、处理质量问题并发布版本。</p></div><div class="card"><h3>领域建模人员</h3><p>将领域知识表达为业务域、主题域、对象、属性、关系、接口、规则和动作。</p></div><div class="card"><h3>平台研发与审计人员</h3><p>检查稳定标识、引用关系、变更记录和可移植数据包，为后续系统接入提供契约。</p></div></div>
+        <h3>核心用户故事</h3>
+        <div class="rule"><b>US-01</b><span>作为建模人员，我可以先从全部本体中选择业务域，再进入该本体的概览与资源建模，避免跨域误操作。</span></div><div class="rule"><b>US-02</b><span>作为领域专家，我可以不写代码地创建带主键、属性、关系和动作的业务模型。</span></div><div class="rule"><b>US-03</b><span>作为管理员，我可以在发布前看到全部修改、阻断错误和警告，并只在校验通过后生成新版本。</span></div><div class="rule"><b>US-04</b><span>作为平台研发，我可以导出完整模型 JSON，在另一环境导入为新本体，并保持内部引用正确。</span></div>
+      </section>
+
+      <section class="section" id="ia">
+        <h2>信息架构与主流程</h2>
+        <div class="flow"><div><b>01 本体目录</b><span>发现、搜索、新建业务语义空间</span></div><i>→</i><div><b>02 本体概览</b><span>查看资源、质量、变更和版本</span></div><i>→</i><div><b>03 资源建模</b><span>对象、关系、动作和复用契约</span></div><i>→</i><div><b>04 模型检查</b><span>图谱、引用、接口与完整性</span></div><i>→</i><div><b>05 审查发布</b><span>工作状态、校验、版本和审计</span></div></div>
+        <div class="rule"><b>导航原则</b><span>“全部本体”和“当前本体”不是平级菜单。两者统一收敛在“本体工作台”中：目录卡片穿透到详情，详情可以返回目录或直接切换本体。</span></div>
+        <div class="rule"><b>上下文原则</b><span>进入对象、关系、动作、图谱或治理页面后，页面顶部持续显示“本体名称 → 当前资源”，并提供返回本体概览与切换本体。</span></div>
+        <figure class="figure"><img src="prd-assets/01-ontology-directory.png" alt="全部本体目录"/><figcaption><b>图 1 · 本体工作台目录层</b><span>统一展示业务说明、版本、状态和资源规模。</span></figcaption></figure>
+        <figure class="figure"><img src="prd-assets/02-ontology-detail.png" alt="本体详情"/><figcaption><b>图 2 · 本体工作台详情层</b><span>同一页面内返回目录或直接切换其他本体。</span></figcaption></figure>
+        <figure class="figure"><img src="prd-assets/03-ontology-switcher.png" alt="本体切换浮层"/><figcaption><b>图 3 · 全局本体切换</b><span>切换器使用居中浮层，不遮挡、裁剪或扰动侧栏菜单。</span></figcaption></figure>
+      </section>
+
+      <section class="section" id="requirements">
+        <h2>功能需求清单</h2>
+        <div class="table-wrap"><table><thead><tr><th>编号</th><th>优先级</th><th>模块</th><th>需求说明</th><th>验收要点</th></tr></thead><tbody>
+          <tr><td>FR-01</td><td><span class="tag p0">P0</span></td><td>本体工作台</td><td>目录与详情使用同一工作台层级；支持搜索、卡片穿透、返回和详情内切换。</td><td>切换后 URL、侧栏上下文、统计和资源目录同步。</td></tr>
+          <tr><td>FR-02</td><td><span class="tag p0">P0</span></td><td>本体 CRUD</td><td>维护名称、唯一命名空间、业务说明、工作状态、版本和更新时间。</td><td>重复命名空间被拒绝；新建后直接进入详情。</td></tr>
+          <tr><td>FR-03</td><td><span class="tag p0">P0</span></td><td>对象类型</td><td>三步向导维护稳定标识、平台图标、主题域、已登记数据源、属性、主键、标题属性、接口和状态；不填写复数显示名。</td><td>必须且只能有一个主键；标题属性必须存在；未归入主题域时不能提交评审。</td></tr>
+          <tr><td>FR-04</td><td><span class="tag p0">P0</span></td><td>关系类型</td><td>定义起点、终点、方向、基数、业务说明、关系属性和生命周期。</td><td>端点必须属于当前本体；删除端点对象前检查引用。</td></tr>
+          <tr><td>FR-05</td><td><span class="tag p0">P0</span></td><td>动作类型</td><td>定义目标对象、新建/修改/删除规则、参数、提交条件、审批要求与对象影响。</td><td>通过能力与执行映射形成可执行契约；原型只做受控演示，不写生产系统。</td></tr>
+          <tr><td>FR-06</td><td><span class="tag p0">P0</span></td><td>业务域与主题域</td><td>分类主路径固定为“本体 → 业务域 → 主题域 → 对象类型”。</td><td>对象直接归属主题域；有下级引用时不得删除。</td></tr>
+          <tr><td>FR-07</td><td><span class="tag p0">P0</span></td><td>接口</td><td>定义可由多个对象类型实现的属性契约，并展示实现对象。</td><td>实现对象必须包含接口要求的同名同类型属性。</td></tr>
+          <tr><td>FR-08</td><td><span class="tag p0">P0</span></td><td>数据源与映射</td><td>登记数据源，以选择器绑定对象、属性和关系目标，并运行结构化样例测试。</td><td>来源和目标必须存在；被对象、映射或场景引用的数据源不能删除。</td></tr>
+          <tr><td>FR-09</td><td><span class="tag p0">P0</span></td><td>资源目录</td><td>支持统一搜索、状态筛选、类型筛选、检查器和资源快捷创建。</td><td><code>⌘/Ctrl + K</code> 聚焦搜索；新建资源可直接进入对应表单。</td></tr>
+          <tr><td>FR-10</td><td><span class="tag p0">P0</span></td><td>模型图谱</td><td>展示对象节点、关系方向与基数，支持定位、适配全图、重排和对象检查。</td><td>切换本体和改变视口后全部节点仍在可视区域。</td></tr>
+          <tr><td>FR-11</td><td><span class="tag p0">P0</span></td><td>校验与发布</td><td>修改先进入工作状态；展示错误、警告、检查项和待审查变更，校验通过后发布版本。</td><td>阻断错误存在时不可发布；发布后版本递增、待审查队列清空。</td></tr>
+          <tr><td>FR-12</td><td><span class="tag p0">P0</span></td><td>导入导出</td><td>导出完整本体 JSON；导入时建立新的本体并重建内部引用。</td><td>不覆盖当前本体；非法数据不产生半成品。</td></tr>
+          <tr><td>FR-13</td><td><span class="tag p1">P1</span></td><td>审计</td><td>记录资源类型、操作、摘要、操作者、时间和是否仍在工作状态。</td><td>创建、编辑、删除和发布均可追溯。</td></tr>
+          <tr><td>FR-14</td><td><span class="tag p1">P1</span></td><td>响应式布局</td><td>两级侧栏可折叠，表格在局部滚动，主页面不被层层压缩或整体横向溢出。</td><td>694px 与 1280px 视口均可完成核心操作。</td></tr>
+          <tr><td>FR-15</td><td><span class="tag p0">P0</span></td><td>业务场景</td><td>以对象为入口，组装关系、数据映射、规则、动作、审批和结果验证步骤。</td><td>步骤顺序连续，引用完整，写动作必须人工确认，运行轨迹可审计。</td></tr>
+        </tbody></table></div>
+        <figure class="figure"><img src="prd-assets/04-object-wizard.png" alt="对象类型创建向导"/><figcaption><b>图 4 · 对象类型创建向导</b><span>图标由平台统一选择，不要求用户输入字符。</span></figcaption></figure>
+        <figure class="figure"><img src="prd-assets/05-model-graph.png" alt="模型图谱"/><figcaption><b>图 5 · 模型图谱与检查器</b><span>对象、关系、方向、基数和详情形成一致的模型视图。</span></figcaption></figure>
+      </section>
+
+      <section class="section" id="rules">
+        <h2>核心元模型与业务规则</h2>
+        <div class="table-wrap"><table><thead><tr><th>资源</th><th>最小定义</th><th>关键约束</th><th>生命周期</th></tr></thead><tbody>
+          <tr><td>本体</td><td>名称、命名空间、说明</td><td>命名空间全局唯一；资源跨本体隔离</td><td>设计中 / 待评审 / 评审通过 / 已发布</td></tr>
+          <tr><td>业务域 / 主题域</td><td>编码、名称、责任人、上级域</td><td>对象直接归属主题域；存在引用时禁止删除</td><td>随本体工作状态与版本治理</td></tr>
+          <tr><td>对象类型</td><td>稳定标识、显示名、主键、属性、主题域</td><td>唯一主键；标题属性有效；接口完整实现；数据源已登记</td><td>已启用 / 试验中 / 已弃用 / 示例</td></tr>
+          <tr><td>关系类型</td><td>稳定标识、显示名、起终点、基数</td><td>端点必须属于当前本体；已启用关系要求端点状态一致</td><td>已启用 / 试验中 / 已弃用 / 示例</td></tr>
+          <tr><td>动作类型</td><td>目标对象、规则、参数</td><td>目标属于当前本体；写操作通过权限、确认与审计</td><td>已启用 / 试验中 / 已弃用 / 示例</td></tr>
+          <tr><td>接口</td><td>稳定标识、显示名、属性契约</td><td>实现对象必须满足同名同类型属性</td><td>已启用 / 试验中 / 已弃用 / 示例</td></tr>
+          <tr><td>业务场景</td><td>入口、触发、资源引用、执行步骤、输出、验收</td><td>引用可解析；步骤顺序连续；写动作需要人工确认</td><td>工作状态 / 已启用 / 已停用</td></tr>
+        </tbody></table></div>
+        <h3>删除与修改保护</h3><div class="rule"><b>稳定标识</b><span>已建立的引用编码不能直接修改；需要改名时新建资源并迁移依赖。</span></div><div class="rule"><b>引用保护</b><span>被关系、动作、接口、数据映射或业务场景引用的资源不能直接删除，必须先解除引用。</span></div><div class="rule"><b>状态降级</b><span>对象降级为试验中、已弃用或示例时，关联关系同步降级，避免发布状态不一致。</span></div>
+      </section>
+
+      <section class="section" id="experience">
+        <h2>交互与页面规范</h2>
+        <div class="grid2"><div class="card"><h3>上下文不丢失</h3><p>所有资源页显示当前本体和当前位置；返回概览不经过目录；切换本体保持所在资源页。</p></div><div class="card"><h3>创建路径明确</h3><p>总览“新建资源”先选择类型，再直接打开相应创建表单；依赖不足时明确禁用。</p></div><div class="card"><h3>表单逐步披露</h3><p>对象类型使用三步向导；业务场景使用四段编辑并可自动生成执行步骤。</p></div><div class="card"><h3>不手写 JSON</h3><p>枚举、资源引用与映射目标使用选择器；可变键值结构使用表格编辑器。</p></div><div class="card"><h3>危险操作可解释</h3><p>删除前说明目标与影响；后端返回具体引用数量；已启用资源要求先弃用。</p></div><div class="card"><h3>技术标识与业务名并列</h3><p>中文名称服务业务理解，稳定标识服务系统集成，列表和检查器同时展示。</p></div></div>
+      </section>
+
+      <section class="section" id="nonfunctional">
+        <h2>非功能需求</h2>
+        <div class="table-wrap"><table><thead><tr><th>类别</th><th>一期要求</th><th>验证方式</th></tr></thead><tbody>
+          <tr><td>隔离性</td><td>所有资源查询和写入必须带本体 ID；跨本体端点、目标和绑定被拒绝。</td><td>API 自动化构造跨本体引用。</td></tr><tr><td>一致性</td><td>对象、关系、动作、接口、数据映射和场景约束由后端统一校验，不能只依赖前端。</td><td>绕过前端直接提交非法数据。</td></tr><tr><td>性能</td><td>原型规模下目录与资源页面 1 秒内可交互；图谱稳定布局不阻塞页面。</td><td>采购财务与管网两个内置本体、百级资源压力验证。</td></tr><tr><td>可移植性</td><td>JSON 数据包包含模式版本、导出时间、元数据、模板扩展资源和实例。</td><td>导出后在空环境导入并对比统计。</td></tr><tr><td>AI 安全</td><td>密钥只从环境变量读取；资料只形成 Proposal；模型失败时明确标记降级，不伪造成功。</td><td>代码扫描、模型请求 Mock、无密钥降级验证。</td></tr><tr><td>动作安全</td><td>写操作必须经过权限、确认和审计；原型不触达生产执行器。</td><td>智能体动作确认用例与轨迹检查。</td></tr><tr><td>兼容性</td><td>支持主流 Chromium 浏览器；桌面优先，两级导航可折叠。</td><td>1280px、1440px、1920px 三档回归。</td></tr><tr><td>可审计性</td><td>元数据变更、建模建议决策、合并与智能体工具调用均可追溯。</td><td>覆盖增删改查、AI 构建、发布与智能体场景。</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="section" id="acceptance">
+        <h2>一期验收标准</h2>
+        <div class="grid2"><div><h3>业务验收</h3><ul class="scope-list"><li>采购财务与管网两套内置本体保持完整且受保护</li><li>15 张模板工作表均能在对应系统资源中找到</li><li>可完成证据 → DeepSeek → 建模建议 → 人工决策 → 合并 → 发布</li><li>可完成对象、关系、映射、规则、动作、接口与权限的手工维护</li><li>业务场景可生成和编辑执行步骤，写操作必须确认</li><li>图谱节点、边、方向和基数与关系定义一致</li></ul></div><div><h3>质量门槛</h3><ul class="scope-list"><li>后端 API 自动化产品契约全部通过</li><li>未配置模型密钥时明确显示确定性降级，不伪装模型运行</li><li>前端生产构建无错误</li><li>关键页面无整体横向溢出和不可见画布</li><li>切换本体不出现侧栏裁剪、遮挡或状态错位</li><li>P0 用例全部通过，P1 不存在阻断性缺陷</li></ul></div></div>
+        <figure class="figure"><img src="prd-assets/06-governance.png" alt="校验与发布"/><figcaption><b>图 6 · 工作状态、质量检查与发布</b><span>修改、校验、审查、版本和审计形成一期闭环。</span></figcaption></figure>
+      </section>
+
+      <section class="section" id="plan">
+        <h2>四周实施计划与依赖</h2>
+        <p>任务按单人 2–8 小时可完成粒度拆分，整体预留约 25% 联调与缺陷缓冲。</p>
+        <div class="milestone"><div><b>M1 · 元模型与本体工作台（第 1 周）</b><span>完成本体容器、业务域、主题域、多本体目录和上下文切换；完成标准：两套内置本体互相隔离。</span></div><div><b>M2 · 核心资源与数据映射（第 2 周）</b><span>完成对象、属性、关系、独立接口、数据源、映射、实例与引用保护。</span></div><div><b>M3 · 场景、图谱与治理闭环（第 3 周）</b><span>完成可编排场景、规则、动作、图谱、工作状态、评审、发布与审计。</span></div><div><b>M4 · 智能构建与验收（第 4 周）</b><span>完成文件证据、增量建议、人工决策、响应式、测试与业务试用；完成标准：P0 全通过。</span></div></div>
+        <h3>工作分解</h3><div class="table-wrap"><table><thead><tr><th>任务</th><th>工作量</th><th>角色</th><th>依赖</th><th>完成标准</th></tr></thead><tbody>
+          <tr><td>元模型与数据库表</td><td>8h</td><td>后端</td><td>无</td><td>本体、业务域、主题域与核心资源可持久化</td></tr><tr><td>本体目录与上下文路由</td><td>6h</td><td>前端</td><td>本体 API</td><td>目录、详情、返回、页内切换一致</td></tr><tr><td>对象类型三步向导</td><td>8h</td><td>前端+后端</td><td>属性元模型</td><td>主键、图标、主题域、数据源与接口可保存</td></tr><tr><td>数据源与映射</td><td>10h</td><td>前端+后端</td><td>对象与关系</td><td>对象/属性/关系映射可配置、校验和测试</td></tr><tr><td>业务场景编排</td><td>10h</td><td>前端+后端</td><td>映射、规则与动作</td><td>步骤可生成、编辑、排序、校验和运行</td></tr><tr><td>接口契约与引用保护</td><td>8h</td><td>后端</td><td>对象类型</td><td>接口属性契约、数据源和映射引用受保护</td></tr><tr><td>图谱与检查器</td><td>6h</td><td>前端</td><td>对象与关系 API</td><td>全图可见、可定位、可重排</td></tr><tr><td>校验、评审、发布和审计</td><td>8h</td><td>后端+前端</td><td>完整元模型</td><td>不可越级发布，版本递增，日志完整</td></tr><tr><td>导入导出</td><td>5h</td><td>后端</td><td>完整元模型</td><td>重建 ID 映射且不覆盖原本体</td></tr><tr><td>自动化与业务验收</td><td>8h</td><td>测试+产品</td><td>全部功能</td><td>P0 全通过，问题闭环</td></tr>
+        </tbody></table></div>
+      </section>
+
+      <section class="section" id="risks">
+        <h2>风险、缓解与二期衔接</h2>
+        <div class="table-wrap"><table><thead><tr><th>风险</th><th>影响</th><th>概率</th><th>缓解措施</th></tr></thead><tbody>
+          <tr><td>把分类、接口、场景混为同一概念</td><td>高</td><td>中</td><td>业务域与主题域做分类；接口做结构契约；场景做横向业务闭环。</td></tr><tr><td>跨本体误引用</td><td>高</td><td>中</td><td>所有绑定由后端校验 ontology_id，不依赖下拉框过滤。</td></tr><tr><td>模板字段质量不一致</td><td>高</td><td>高</td><td>保留原编码作追溯，以语义名称修复对象绑定，问题写入版本记录。</td></tr><tr><td>模型建议污染正式模型</td><td>高</td><td>中</td><td>统一走证据 → 建模建议 → 人工决策 → 合并 → 发布，模型没有直写正式版本的接口。</td></tr><tr><td>动作越权或误执行</td><td>高</td><td>中</td><td>权限策略、确认、执行映射和审计四层控制；原型不触达生产执行器。</td></tr><tr><td>SQLite 在多人高并发下受限</td><td>中</td><td>低</td><td>用于高保真原型和契约定型；生产迁移到版本化元数据与对象索引服务。</td></tr>
+        </tbody></table></div>
+        <h3>一期增强版已打通的闭环</h3><div class="flow"><div><b>证据集</b><span>文件、模板与领域证据</span></div><i>→</i><div><b>本体建模提案</b><span>候选对象、关系和动作</span></div><i>→</i><div><b>差异与评审</b><span>接受、驳回、证据与置信度</span></div><i>→</i><div><b>已发布本体</b><span>人工确认后的正式版本</span></div><i>→</i><div><b>智能体运行时</b><span>查询、规则和受控动作</span></div></div>
+        <div class="callout"><strong>生产化方向：</strong>保持当前元模型、稳定标识、建模提案状态机和 动作安全边界不变，替换存储、解析、授权和执行基础设施，而不是重新设计一套不兼容的产品。</div>
+      </section>
+      <div class="footer">企业本体 Studio · 一期增强版产品需求文档 · v1.9 · 2026-09-04</div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

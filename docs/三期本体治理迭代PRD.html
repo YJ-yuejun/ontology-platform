@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>本体中心三期迭代 PRD</title>
+  <style>
+    :root{font-family:Inter,"PingFang SC","Microsoft YaHei",sans-serif;color:#183348;background:#edf3f8}
+    *{box-sizing:border-box}body{margin:0}.page{max-width:1080px;margin:30px auto;padding:0 22px 40px}
+    header{padding:30px 34px;background:#133b63;color:#fff;border-radius:12px}header small{color:#9dd7ff;letter-spacing:.08em}h1{margin:7px 0;font-size:30px}header p{max-width:780px;margin:0;color:#d7e8f6;line-height:1.7}
+    section{margin-top:16px;padding:24px 28px;background:#fff;border:1px solid #d9e5ef;border-radius:10px}h2{margin:0 0 14px;font-size:19px}h3{margin:18px 0 7px;font-size:15px;color:#205f92}p,li{line-height:1.75}p{margin:7px 0}ul,ol{padding-left:22px;margin:6px 0}.muted{color:#657f92}.tag{display:inline-block;padding:3px 8px;border-radius:4px;background:#e8f3fb;color:#176da9;font-size:12px}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.card{padding:15px;border:1px solid #e0eaf1;border-radius:7px;background:#fbfdff}.card strong{display:block;margin-bottom:5px;color:#194c76}.flow{display:flex;flex-wrap:wrap;align-items:center;gap:7px}.flow span{padding:8px 11px;background:#eaf4fb;border-radius:5px}.flow b{color:#79a1bd}.note{padding:12px 14px;border-left:3px solid #2c80b6;background:#f1f8fd}.warning{border-left-color:#dc9841;background:#fff8ee}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:10px 12px;border:1px solid #dce7ef;text-align:left;vertical-align:top}th{background:#eef5fa}a{color:#126ba8;text-decoration:none}footer{padding:18px;color:#678296;font-size:12px;text-align:center}
+    @media(max-width:700px){.page{padding:0 10px}.grid{grid-template-columns:1fr}section{padding:19px}header{padding:23px}h1{font-size:24px}}
+  </style>
+</head>
+<body><main class="page">
+  <header><small>ONTOLOGY CENTER · PHASE 3</small><h1>本体治理三期迭代 PRD</h1><p>目标是让语义模型从“能建”进入“能检查、能追溯、能比较、能安全发布”。本文只定义业务逻辑、页面与验收重点，不展开物理表设计。</p></header>
+
+  <section><h2>1. 本期范围与优先级</h2><div class="grid">
+    <div class="card"><strong>P0 · 发布版本闭环</strong>工作状态变更 → 本体质检 → 提交评审 → 评审通过 → 发布不可变版本；发布前二次校验模型未变化。</div>
+    <div class="card"><strong>P0 · 历史版与差异</strong>每次发布保存语义模型快照；旧版只读；能比较两个发布版，或发布版与当前工作状态；删除资源在旧版仍可见。</div>
+    <div class="card"><strong>P1 · 语义治理工具</strong>映射图谱展示“物理来源 → 治理资产 → 本体语义”，并可切换已发布版本；字典管理维护建模下拉选项。</div>
+    <div class="card"><strong>P1 · 可追溯记录</strong>在变更记录查看谁在何时对什么资源执行了什么操作；工作状态变更与发布版本记录相互关联。</div>
+  </div></section>
+
+  <section><h2>2. 用户主流程</h2><div class="flow"><span>修改工作状态</span><b>→</b><span>查看影响并质检</span><b>→</b><span>提交评审</span><b>→</b><span>评审通过</span><b>→</b><span>发布新版本</span><b>→</b><span>查看／对比历史版</span></div>
+    <ul><li>用户编辑对象、关系、规则、动作、映射等语义资源时，只影响当前工作状态；任何修改都应留下操作记录。</li><li>质检报告绑定一次具体的模型状态。报告生成后只要语义资源或共用字典发生变化，就显示“已过期”，必须重跑。</li><li>阻断性错误未解决、没有待发布变更、质检未通过或报告过期时，不能提交评审。仅“评审通过”的工作状态可发布。</li><li>发布时再次核对工作状态和质检指纹；若期间被修改，拒绝发布并让用户重新质检和评审。</li><li>正式版本仅记录语义定义与治理配置，不把实例业务数据、密码、密钥作为版本快照内容。</li></ul>
+    <p class="note warning"><strong>当前交付边界：</strong>本期为“一个工作状态 + 多个只读发布快照”。它借鉴 Foundry 的变更评审和发布思路，但不宣称已实现多用户并行分支、rebase、自动合并或冲突裁决；这些能力须单独规划和验收。正式系统还需接入登录身份与评审权限，原型中的评审按钮不等于已完成权限隔离。</p>
+  </section>
+
+  <section><h2>3. 页面与交互重点</h2><table><thead><tr><th>入口</th><th>本期应完成的业务行为</th><th>验收重点</th></tr></thead><tbody>
+    <tr><td>本体质检</td><td>对当前工作状态运行确定性语义检查，保存报告；对话仅用于解释报告和给出基于证据的修复指引。</td><td>有结论、问题清单、检查范围、执行时间与报告过期提示；AI 不得擅自改分或声称检查了实例及生产接口。</td></tr>
+    <tr><td>版本与发布</td><td>集中呈现待发布变更、模型检查、影响概览、质检门槛、评审状态和历史版本。</td><td>不能绕过质检与评审直接发布；发布版不可编辑；每个历史版本可打开只读语义快照。</td></tr>
+    <tr><td>本体版本对比</td><td>选择两个状态，按资源稳定标识比较新增、修改、删除，并在左右两栏看字段差异。</td><td>删除项在旧版仍有定义；对话只能解释已算出的差异，不把“可能影响”冒充已验证结果。</td></tr>
+    <tr><td>映射图谱</td><td>由已有来源、治理资产、语义映射推导三层血缘；可选择当前工作状态或历史发布版。</td><td>节点和连线有登记依据；不凭空造映射；旧物理直连以待适配样式区分。</td></tr>
+    <tr><td>字典管理</td><td>集中维护共用建模选项，并让表单使用同一套可选值。</td><td>业务域、主题域不是字典项；已被引用的选项不可随意删除；字典变化使旧质检报告过期。</td></tr>
+    <tr><td>变更记录</td><td>查看操作者、时间、操作、资源与所属本体；支持筛选和分页。</td><td>记录可追溯；系统初始化记录与人工操作区分；不将操作日志当成历史版本快照。真实用户身份由平台鉴权接入，原型暂以建模管理员标识演示。</td></tr>
+  </tbody></table></section>
+
+  <section><h2>4. 菜单结构</h2><p>按 Ontology Manager 常见的“发现模型—编辑语义资源—处理映射和运行能力—治理变更”任务路径组织，但保留本产品已有业务域、主题域、规则、字典等菜单：</p>
+    <div class="grid"><div class="card"><strong>发现</strong>本体工作台、模型图谱、业务场景</div><div class="card"><strong>本体模型</strong>业务域与主题域、对象类型、关系类型、动作类型、规则、接口、字典管理</div><div class="card"><strong>数据与映射</strong>数据源与映射（含映射图谱）、实例数据</div><div class="card"><strong>运行能力</strong>系统能力与执行映射、本体智能体</div><div class="card"><strong>变更与发布</strong>本体质检、本体版本对比、版本与发布、变更记录、权限策略</div></div>
+    <p class="muted">不为“映射图谱”单独复制一套配置：它是数据源与映射的只读可视化视图。历史版入口放在版本与发布的发布记录中。</p>
+  </section>
+
+  <section><h2>5. 版本业务规则</h2><ol>
+    <li>“本体 ID”代表长期稳定的语义空间；“版本号”只代表一次正式发布，不随着普通保存自动增加。</li>
+    <li>发布 V1.1 后，V1.0 的语义定义保持发布当时的样子。V1.1 删除的资源，在 V1.0 中仍可查看，在 V1.1 中不存在。</li>
+    <li>当前建模页面默认读工作状态；历史版查看与版本对比显式选择发布快照。不能把一个页面里的历史只读值伪装成可编辑的当前值。</li>
+    <li>字典属于跨本体共用配置；每个发布快照保留当时用于解释模型的字典值。字典变更可以使工作状态质检过期，但不会改写已发布快照。</li>
+    <li>发布影响中的“兼容、增量、破坏性”是建模层预判；若未完成下游依赖或生产数据验证，必须明确标为待核查。</li>
+  </ol></section>
+
+  <section><h2>6. 明确不纳入本期</h2><p>不做实例数据版本化、历史实例回放、数据源生产连通性背书、自动数据迁移、自动回滚、多并行工作分支与智能冲突合并。若后续需要“恢复旧版”，应由旧版定义生成一份新的待评审工作变更，再走质检和发布流程，不直接覆盖历史。</p></section>
+
+  <section><h2>7. 验收用例</h2><ul><li>创建资源后不运行质检：无法提交评审和发布；运行通过后可提交并审批。</li><li>质检通过后再改对象属性或字典项：报告显示过期，发布被阻断。</li><li>发布 V1.0 后删除对象并发布 V1.1：V1.0 只读页仍有对象；版本对比显示“删除”。</li><li>映射图谱切换 V1.0 与 V1.1：图中节点与连线按所选快照变化，不显示敏感连接凭据。</li><li>用户可在变更记录按时间追踪“谁修改了什么”，并从发布记录打开对应历史语义模型。</li></ul></section>
+
+  <section><h2>参考原则</h2><p>参考 Palantir 官方关于 <a href="https://www.palantir.com/docs/foundry/ontology-manager/overview">Ontology Manager</a>、<a href="https://www.palantir.com/docs/foundry/ontologies/branching-ontology">Ontology branching</a>、<a href="https://www.palantir.com/docs/foundry/ontologies/review-ontology-proposals">Proposal review</a> 和 <a href="https://www.palantir.com/docs/foundry/ontology/ontology-design-validation">设计校验</a> 的产品思路；本期实现范围以本文验收口径为准，不将 Foundry 的完整能力等同于本原型已实现能力。</p></section>
+  <footer>本体中心三期 · 业务逻辑与交互重点版</footer>
+</main></body></html>
