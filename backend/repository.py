@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import functools
 import json
 import os
 import re
@@ -56,12 +57,38 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_open_conns: ContextVar[tuple] = ContextVar("ontology_open_conns", default=())
+
+
 def get_conn() -> sqlite3.Connection:
     Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    _open_conns.set(_open_conns.get() + (conn,))
     return conn
+
+
+def _no_leak(fn):
+    """入口函数退出时兜底关闭本次调用打开的连接。
+
+    业务校验函数（_ensure_object_in_ontology、_validate_link_status 等）在连接
+    已打开后抛错时，原有的 `conn.close(); raise` 写法覆盖不到，会泄漏文件描述符。
+    这里不改动各函数体，只在入口处统一收口；重复 close 对 sqlite3 是空操作。
+    """
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        token = _open_conns.set(())
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            for conn in _open_conns.get():
+                try:
+                    conn.close()
+                except sqlite3.Error:
+                    pass
+            _open_conns.reset(token)
+    return wrapper
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
@@ -539,6 +566,7 @@ def _validate_properties(properties: Iterable[PropertyDef], require_pk: bool) ->
             raise ValidationError(f"枚举属性 {item.key} 必须提供选项")
 
 
+@_no_leak
 def create_ontology(data: OntologyBase) -> Dict[str, Any]:
     conn = get_conn()
     if conn.execute("SELECT 1 FROM ontologies WHERE namespace=?", (data.namespace,)).fetchone():
@@ -595,6 +623,7 @@ def get_ontology(oid: str) -> Dict[str, Any]:
     return _row_ontology(row)
 
 
+@_no_leak
 def update_ontology(oid: str, data: OntologyBase) -> Dict[str, Any]:
     before=get_ontology(oid)
     conn = get_conn()
@@ -648,6 +677,7 @@ def _validate_object_definition(conn: sqlite3.Connection, oid: str, data: Object
     return None, effective, title
 
 
+@_no_leak
 def create_object_type(oid: str, data: ObjectTypeBase, legacy_source: Optional[str] = None,
                        legacy_domain_binding: Optional[tuple] = None) -> Dict[str, Any]:
     """legacy_source / legacy_domain_binding 供整体复制本体时照搬源对象的既有绑定，
@@ -669,6 +699,7 @@ def create_object_type(oid: str, data: ObjectTypeBase, legacy_source: Optional[s
     conn.commit(); conn.close(); return get_object_type(cid)
 
 
+@_no_leak
 def update_object_type(component_id: str, data: ObjectTypeBase) -> Dict[str, Any]:
     current=get_object_type(component_id)
     if current["status"] in ("active", "promoted") and data.name != current["name"]:
@@ -690,6 +721,7 @@ def update_object_type(component_id: str, data: ObjectTypeBase) -> Dict[str, Any
     conn.commit(); conn.close(); return get_object_type(component_id)
 
 
+@_no_leak
 def delete_object_type(component_id: str) -> None:
     current=get_object_type(component_id); conn=get_conn()
     if current["status"] in ("active", "promoted"):
@@ -782,6 +814,7 @@ def get_link_type(component_id: str) -> Dict[str, Any]:
     return _row_link(row)
 
 
+@_no_leak
 def save_link_type(oid: str, data: LinkTypeBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); _validate_properties(data.properties,False); conn=get_conn(); _ensure_object_in_ontology(conn,oid,data.source_object_type_id); _ensure_object_in_ontology(conn,oid,data.target_object_type_id)
     conflict=conn.execute("SELECT 1 FROM link_types WHERE ontology_id=? AND name=? AND id<>?",(oid,data.name,component_id or "")).fetchone()
@@ -809,6 +842,7 @@ def save_link_type(oid: str, data: LinkTypeBase, component_id: Optional[str]=Non
     conn.execute("UPDATE ontologies SET updated_at=? WHERE id=?",(timestamp,oid)); _log(conn,oid,"link_type",component_id,op,f"{'更新' if op=='update' else '创建'}关系类型 {data.display_name}",before=before,after=after); conn.commit(); conn.close(); return get_link_type(component_id)
 
 
+@_no_leak
 def delete_link_type(component_id: str) -> None:
     current=get_link_type(component_id); conn=get_conn()
     if current["status"] == "active": conn.close(); raise ValidationError("Active 关系类型不能直接删除，请先标记为 Deprecated")
@@ -832,6 +866,7 @@ def get_action(component_id: str) -> Dict[str, Any]:
     return _row_action(row)
 
 
+@_no_leak
 def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); _validate_properties(data.parameters,False); conn=get_conn(); _ensure_object_in_ontology(conn,oid,data.target_object_type_id)
     conflict=conn.execute("SELECT 1 FROM actions WHERE ontology_id=? AND name=? AND id<>?",(oid,data.name,component_id or "")).fetchone()
@@ -859,6 +894,7 @@ def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None) ->
     conn.execute("UPDATE ontologies SET updated_at=? WHERE id=?",(timestamp,oid)); _log(conn,oid,"action",component_id,op,f"{'更新' if op=='update' else '创建'} Action {data.display_name}",before=before,after=after); conn.commit(); conn.close(); return get_action(component_id)
 
 
+@_no_leak
 def delete_action(component_id: str) -> None:
     current=get_action(component_id); conn=get_conn()
     if current["status"] == "active": conn.close(); raise ValidationError("Active Action 不能直接删除，请先标记为 Deprecated")
@@ -876,6 +912,7 @@ def get_shared_property(component_id: str) -> Dict[str, Any]:
     return {**dict(row),"type":row["data_type"],"options":json.loads(row["options"] or "[]")}
 
 
+@_no_leak
 def save_shared_property(oid: str, data: SharedPropertyBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid)
     if data.type == "enum" and not data.options: raise ValidationError("枚举共享属性必须提供选项")
@@ -921,6 +958,7 @@ def get_interface(component_id: str) -> Dict[str, Any]:
     return _row_interface(row)
 
 
+@_no_leak
 def save_interface(oid: str, data: InterfaceBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); _validate_properties(data.properties,False); conn=get_conn()
     conflict=conn.execute("SELECT 1 FROM interfaces WHERE ontology_id=? AND name=? AND id<>?",(oid,data.name,component_id or "")).fetchone()
@@ -941,6 +979,7 @@ def save_interface(oid: str, data: InterfaceBase, component_id: Optional[str]=No
     conn.execute("UPDATE ontologies SET updated_at=? WHERE id=?",(timestamp,oid)); conn.commit(); conn.close(); return get_interface(component_id)
 
 
+@_no_leak
 def delete_interface(component_id: str) -> None:
     current=get_interface(component_id); conn=get_conn()
     used=[]
@@ -969,6 +1008,7 @@ def get_business_domain(component_id: str) -> Dict[str, Any]:
     return next(item for item in list_business_domains(row["ontology_id"]) if item["id"] == component_id)
 
 
+@_no_leak
 def save_business_domain(oid: str, data: BusinessDomainBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); conn=get_conn()
     if conn.execute("SELECT 1 FROM business_domains WHERE ontology_id=? AND code=? AND id<>?",(oid,data.code,component_id or "")).fetchone():
@@ -1021,6 +1061,7 @@ def get_subject_domain(component_id: str) -> Dict[str, Any]:
     return next(item for item in list_subject_domains(row["ontology_id"]) if item["id"] == component_id)
 
 
+@_no_leak
 def save_subject_domain(oid: str, data: SubjectDomainBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); conn=get_conn()
     if not conn.execute("SELECT 1 FROM business_domains WHERE id=? AND ontology_id=?",(data.business_domain_id,oid)).fetchone():
@@ -1081,6 +1122,7 @@ def get_object_type_group(component_id: str) -> Dict[str, Any]:
     return next(item for item in list_object_type_groups(row["ontology_id"]) if item["id"]==component_id)
 
 
+@_no_leak
 def save_object_type_group(oid: str, data: ObjectTypeGroupBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); conn=get_conn(); conflict=conn.execute("SELECT 1 FROM object_type_groups WHERE ontology_id=? AND name=? AND id<>?",(oid,data.name,component_id or "")).fetchone()
     if conflict: conn.close(); raise ConflictError("对象类型组名称已存在")
@@ -1130,6 +1172,7 @@ def get_business_rule(component_id: str) -> Dict[str, Any]:
     return _row_business_rule(row)
 
 
+@_no_leak
 def save_business_rule(oid: str, data: BusinessRuleBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); conn=get_conn(); _ensure_object_in_ontology(conn,oid,data.target_object_type_id)
     conflict=conn.execute("SELECT 1 FROM business_rules WHERE ontology_id=? AND name=? AND id<>?",(oid,data.name,component_id or "")).fetchone()
@@ -1166,8 +1209,17 @@ def delete_business_rule(component_id: str) -> None:
     conn=get_conn(); conn.execute("DELETE FROM business_rules WHERE id=?",(component_id,)); _log(conn,current["ontology_id"],"business_rule",component_id,"delete",f"删除业务规则 {current['display_name']}",before=current); conn.commit(); conn.close()
 
 
+# 规则表达式在进程内 eval，必须先把能造成指数级膨胀的写法挡掉：
+# `9**9**9` 会算出约 3.7 亿位整数，`"a"*999999999` 会撑爆内存，两者都能挂死请求。
+RULE_EXPRESSION_MAX_LENGTH = 2000
+RULE_CONSTANT_MAX_INT_BITS = 64
+RULE_CONSTANT_MAX_STR_LENGTH = 1000
+
+
 def _evaluate_rule_expression(expression: str, sample_data: Dict[str, Any]) -> Any:
     """Evaluate the tiny, deterministic expression subset used by the prototype."""
+    if len(expression) > RULE_EXPRESSION_MAX_LENGTH:
+        raise ValidationError(f"规则表达式过长（上限 {RULE_EXPRESSION_MAX_LENGTH} 字符）")
     flattened: Dict[str, Any] = {}
 
     def walk(prefix: str, value: Any) -> None:
@@ -1199,10 +1251,23 @@ def _evaluate_rule_expression(expression: str, sample_data: Dict[str, Any]) -> A
     allowed = (
         ast.Expression, ast.BoolOp, ast.BinOp, ast.UnaryOp, ast.Compare, ast.Name, ast.Load,
         ast.Constant, ast.List, ast.Tuple, ast.And, ast.Or, ast.Not, ast.Add, ast.Sub,
-        ast.Mult, ast.Div, ast.Mod, ast.Pow, ast.USub, ast.UAdd, ast.Eq, ast.NotEq,
+        ast.Mult, ast.Div, ast.Mod, ast.USub, ast.UAdd, ast.Eq, ast.NotEq,
         ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In, ast.NotIn, ast.Call,
     )
     for node in ast.walk(tree):
+        if isinstance(node, ast.Pow):
+            raise ValidationError("规则表达式不支持幂运算（**），请改用乘法")
+        if isinstance(node, ast.Constant):
+            value = node.value
+            if isinstance(value, int) and not isinstance(value, bool) and value.bit_length() > RULE_CONSTANT_MAX_INT_BITS:
+                raise ValidationError("规则表达式的整数常量过大")
+            if isinstance(value, str) and len(value) > RULE_CONSTANT_MAX_STR_LENGTH:
+                raise ValidationError("规则表达式的字符串常量过长")
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+            # `"a" * 999999999` 逐字面量膨胀，必须在求值前拦下。
+            for side in (node.left, node.right):
+                if isinstance(side, ast.Constant) and isinstance(side.value, (str, bytes, list, tuple)):
+                    raise ValidationError("规则表达式不能用常量序列做乘法")
         if not isinstance(node, allowed):
             raise ValidationError(f"规则表达式包含不支持的语法：{type(node).__name__}")
         if isinstance(node, ast.Call) and (not isinstance(node.func, ast.Name) or node.func.id not in {"abs", "min", "max", "sum", "round"}):
@@ -1249,6 +1314,7 @@ def list_object_instances(oid: str, object_type_id: Optional[str]=None) -> list[
     conn.close(); return [_row_instance(row) for row in rows]
 
 
+@_no_leak
 def get_object_instance(component_id: str) -> Dict[str, Any]:
     conn=get_conn(); row=conn.execute("""SELECT i.*,o.display_name object_type_display_name,o.name object_type_name,o.icon object_type_icon
         FROM object_instances i JOIN object_types o ON o.id=i.object_type_id WHERE i.id=?""",(component_id,)).fetchone()
@@ -1273,6 +1339,7 @@ def _validate_instance_properties(obj: Dict[str, Any], properties: Dict[str, Any
     if missing: raise ValidationError(f"实例缺少必填属性：{'、'.join(missing)}")
 
 
+@_no_leak
 def save_object_instance(oid: str, data: ObjectInstanceBase, component_id: Optional[str]=None) -> Dict[str, Any]:
     get_ontology(oid); conn=get_conn(); _ensure_object_in_ontology(conn,oid,data.object_type_id); conn.close()
     obj=get_object_type(data.object_type_id)
@@ -1313,6 +1380,7 @@ def list_link_instances(oid: str) -> list[Dict[str, Any]]:
     return [{**dict(row),"properties":json.loads(row["properties"] or "{}")} for row in rows]
 
 
+@_no_leak
 def save_link_instance(oid: str, data: LinkInstanceBase) -> Dict[str, Any]:
     get_ontology(oid); conn=get_conn()
     link=conn.execute("SELECT * FROM link_types WHERE id=? AND ontology_id=?",(data.link_type_id,oid)).fetchone()
@@ -1329,6 +1397,7 @@ def save_link_instance(oid: str, data: LinkInstanceBase) -> Dict[str, Any]:
     return next(item for item in list_link_instances(oid) if item["id"]==cid)
 
 
+@_no_leak
 def delete_link_instance(component_id: str) -> None:
     conn=get_conn(); row=conn.execute("SELECT * FROM link_instances WHERE id=?",(component_id,)).fetchone()
     if not row: conn.close(); raise NotFoundError("关系实例不存在")
@@ -1390,11 +1459,8 @@ def release_preview(oid: str) -> Dict[str, Any]:
     breaking = [item for item in pending if item["operation"] == "delete" or any(token in item["summary"] for token in ("主键", "API 名称", "反转", "收紧"))]
     impacted_types = sorted({item["component_type"] for item in pending})
     scenarios = []
-    try:
-        from enterprise import list_resources
-        scenarios = [item["name"] for item in list_resources(oid, "business-scenarios")]
-    except (ImportError, sqlite3.OperationalError):
-        pass
+    from enterprise import list_resources
+    scenarios = [item["name"] for item in list_resources(oid, "business-scenarios")]
     compatibility = "breaking" if breaking else ("additive" if any(item["operation"] == "create" for item in pending) else "compatible")
     return {
         "ontology": current,
@@ -1473,6 +1539,7 @@ def release_history(oid: str) -> list[Dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+@_no_leak
 def publish(oid: str, bump: str="minor", change_reason: str="工作状态变更发布", reviewer: str="") -> Dict[str, Any]:
     pending = changes(oid,None,True)
     if not pending: raise ValidationError("当前没有需要发布的本体变更")
@@ -1516,10 +1583,10 @@ def publish(oid: str, bump: str="minor", change_reason: str="工作状态变更�
         (id,ontology_id,version,status,compatibility,change_reason,reviewer,change_summary,snapshot,created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?)""",
         (str(uuid.uuid4()),oid,version,"published",preview["compatibility"],change_reason,reviewer,summary,_json(snapshot),timestamp))
-    try:
-        from enterprise import RESOURCE_TABLES
-        for table,_ in RESOURCE_TABLES.values(): conn.execute(f"UPDATE {table} SET status='active',updated_at=? WHERE ontology_id=? AND status IN ('draft','proposal')",(timestamp,oid))
-    except (ImportError, sqlite3.OperationalError): pass
+    # 这里不能吞异常：企业资源（数据源、映射、场景等）没被置为 active 却照样发布，
+    # 会得到"发布成功但工作状态与版本不一致"的结果。
+    from enterprise import RESOURCE_TABLES
+    for table,_ in RESOURCE_TABLES.values(): conn.execute(f"UPDATE {table} SET status='active',updated_at=? WHERE ontology_id=? AND status IN ('draft','proposal')",(timestamp,oid))
     conn.execute("UPDATE mdl_ver_chg SET mvc_ver_no=?,mvc_pub_date=?,mvc_reviewer=?,mvc_chg_reason=? WHERE mvc_ontology_id=? AND mvc_pending=1",
                  (version, timestamp[:10], reviewer, change_reason, oid))
     conn.execute("UPDATE change_log SET pending=0 WHERE ontology_id=? AND pending=1",(oid,))
@@ -2011,25 +2078,19 @@ def activity_page(oid: str, page: int = 1, page_size: int = 20,
 
 def export_ontology(oid: str) -> Dict[str, Any]:
     payload={"schema_version":"enterprise-ontology/1.9","exported_at":now(),"ontology":get_ontology(oid),"business_domains":list_business_domains(oid),"subject_domains":list_subject_domains(oid),"interfaces":list_interfaces(oid),"object_types":list_object_types(oid),"link_types":list_link_types(oid),"actions":list_actions(oid),"business_rules":list_business_rules(oid),"object_instances":list_object_instances(oid),"link_instances":list_link_instances(oid)}
-    try:
-        from enterprise import RESOURCE_TABLES, list_evidence, list_resources, list_template_records
-        payload["enterprise_resources"]={kind:list_resources(oid,kind) for kind in RESOURCE_TABLES}
-        payload["evidence_manifest"]=list_evidence(oid)
-        payload["template_records"]=list_template_records(oid)
-    except (ImportError, sqlite3.OperationalError):
-        payload["enterprise_resources"]={}
-        payload["evidence_manifest"]=[]
-        payload["template_records"]=[]
+    # 导出包缺企业资源却静默成功，用户拿到的是一份不完整的数据包，所以这里显式失败。
+    from enterprise import RESOURCE_TABLES, list_evidence, list_resources, list_template_records
+    payload["enterprise_resources"]={kind:list_resources(oid,kind) for kind in RESOURCE_TABLES}
+    payload["evidence_manifest"]=list_evidence(oid)
+    payload["template_records"]=list_template_records(oid)
     return payload
 
 
 def overview(oid: str) -> Dict[str, Any]:
     ontology=get_ontology(oid); objects=list_object_types(oid); links=list_link_types(oid); actions=list_actions(oid); rules=list_business_rules(oid); interfaces=list_interfaces(oid); instances=list_object_instances(oid); report=validate_ontology(oid)
-    try:
-        from enterprise import enterprise_summary
-        enterprise_stats=enterprise_summary(oid)
-    except (ImportError, sqlite3.OperationalError):
-        enterprise_stats={}
+    # 工作台把数据映射/数据源数量直接来自这里；静默返回 0 会让"没有映射"和"统计失败"长得一样。
+    from enterprise import enterprise_summary
+    enterprise_stats=enterprise_summary(oid)
     resources=objects+interfaces+links+actions+rules
     status_counts={status:sum(1 for item in resources if item.get("status")==status) for status in ("promoted","active","experimental","deprecated","example")}
     return {"ontology":ontology,"stats":{"object_types":len(objects),"properties":sum(len(o["effective_properties"]) for o in objects),"link_types":len(links),"actions":len(actions),"business_rules":len(rules),"instances":len(instances),"interfaces":len(interfaces),"business_domains":len(list_business_domains(oid)),"subject_domains":len(list_subject_domains(oid)),"resources":len(resources)},"enterprise":enterprise_stats,"status_counts":status_counts,"pending_changes":len(changes(oid,500,True)),"quality":{"valid":report["valid"],"checks_passed":sum(1 for c in report["checks"] if c["passed"]),"checks_total":len(report["checks"]),"warnings":len(report["warnings"]),"errors":len(report["errors"])},"recent_changes":activity_page(oid, page_size=5)["items"]}
@@ -2082,18 +2143,16 @@ def import_ontology(payload: Dict[str, Any]) -> Dict[str, Any]:
         data={k:v for k,v in item.items() if k in ObjectInstanceBase.model_fields}; data["object_type_id"]=id_map.get(item.get("object_type_id"),item.get("object_type_id")); saved=save_object_instance(oid,ObjectInstanceBase(**data)); instance_map[item.get("id")]=saved["id"]
     for item in payload.get("link_instances",[]):
         data={k:v for k,v in item.items() if k in LinkInstanceBase.model_fields}; data["link_type_id"]=link_map.get(item.get("link_type_id"),item.get("link_type_id")); data["source_instance_id"]=instance_map.get(item.get("source_instance_id"),item.get("source_instance_id")); data["target_instance_id"]=instance_map.get(item.get("target_instance_id"),item.get("target_instance_id")); save_link_instance(oid,LinkInstanceBase(**data))
-    try:
-        from enterprise import RESOURCE_TABLES, save_resource
-        from models import EnterpriseResourceBase
-        for kind, items in (payload.get("enterprise_resources") or {}).items():
-            if kind not in RESOURCE_TABLES: continue
-            for item in items:
-                core={key:item.get(key) for key in ("code","name","category","status","description")}
-                excluded={"id","ontology_id","code","name","category","status","description","created_at","updated_at"}
-                core["payload"]={key:value for key,value in item.items() if key not in excluded}
-                save_resource(oid,kind,EnterpriseResourceBase(**core))
-    except (ImportError, sqlite3.OperationalError):
-        pass
+    # 导入时丢掉企业资源是静默数据丢失，必须报错让调用方知道导入不完整。
+    from enterprise import RESOURCE_TABLES, save_resource
+    from models import EnterpriseResourceBase
+    for kind, items in (payload.get("enterprise_resources") or {}).items():
+        if kind not in RESOURCE_TABLES: continue
+        for item in items:
+            core={key:item.get(key) for key in ("code","name","category","status","description")}
+            excluded={"id","ontology_id","code","name","category","status","description","created_at","updated_at"}
+            core["payload"]={key:value for key,value in item.items() if key not in excluded}
+            save_resource(oid,kind,EnterpriseResourceBase(**core))
     return get_ontology(oid)
 
 
