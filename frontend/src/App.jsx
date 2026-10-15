@@ -2,13 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
   Activity, ArrowLeft, BookOpen, Bot, Boxes, Building2, Check, ChevronDown, ChevronLeft, ChevronRight,
-  ClipboardList, Database, FileText, GitBranch, Hammer, History, ListChecks, Menu,
+  ClipboardList, Database, FileText, GitBranch, Hammer, History, ListChecks, ListTree, Menu,
   Library, MessageSquareText, Network, Plus, Search, Settings, ShieldCheck, Sparkles, Layers3,
   Waypoints, Workflow,
 } from 'lucide-react';
 import { api } from './api';
 import Modal from './components/Modal';
 import ObjectTypes from './pages/ObjectTypes';
+import ObjectProperties from './pages/ObjectProperties';
 import LinkTypes from './pages/LinkTypes';
 import Actions from './pages/Actions';
 import GraphPage from './pages/GraphPage';
@@ -48,12 +49,13 @@ const MAIN_NAV = [
 const ONTOLOGY_NAV = [
   { id: 'workbench', label: '工作区', items: [
     { to: '/ontology/overview', label: '本体工作台', icon: Library },
-    { to: '/ontology/graph', label: '模型图谱', icon: Network },
+    { to: '/ontology/graph', label: '本体图谱', icon: Network },
     { to: '/ontology/scenarios', label: '业务场景', icon: Workflow },
   ] },
   { id: 'model', label: '本体模型', items: [
     { to: '/ontology/model/domains', label: '业务域与主题域', icon: Building2 },
     { to: '/ontology/model/object-types', label: '对象类型', icon: Boxes },
+    { to: '/ontology/model/object-properties', label: '对象属性', icon: ListTree, child: true },
     { to: '/ontology/model/link-types', label: '关系类型', icon: GitBranch },
     { to: '/ontology/model/actions', label: '动作类型', icon: Hammer },
     { to: '/ontology/logic/definitions', label: '规则', icon: ListChecks },
@@ -82,11 +84,12 @@ const TITLES = {
   '/ontology/scenarios': ['业务场景', '用真实业务闭环校验本体覆盖度'],
   '/ontology/model/domains': ['业务域与主题域', '以两级分类组织对象类型的业务边界'],
   '/ontology/model/object-types': ['对象类型', '管理可识别、可关联、可产生实例的业务对象'],
+  '/ontology/model/object-properties': ['对象属性', '汇总查看全部对象类型的属性定义与映射情况'],
   '/ontology/model/interfaces': ['接口', '单独管理跨对象类型的统一属性契约'],
   '/ontology/model/link-types': ['关系类型', '手工维护对象之间的业务关系、方向与基数'],
   '/ontology/model/dictionaries': ['字典管理', '维护全局共享的建模选项'],
   '/ontology/model/actions': ['动作类型', '定义对象允许执行的业务动作契约'],
-  '/ontology/graph': ['模型图谱', '从全局查看对象与关系组成的语义网络'],
+  '/ontology/graph': ['本体图谱', '从全局查看并直接维护对象与关系组成的语义网络'],
   '/ontology/data/instances': ['实例数据', '查看业务对象实例并沿关系穿透完整业务链'],
   '/ontology/data/connections': ['数据源与映射', '经数据治理层把物理来源关联到稳定业务语义'],
   '/ontology/logic/definitions': ['规则', '管理确定性业务逻辑并作为智能体工具复用'],
@@ -139,7 +142,7 @@ function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher
         {open && items.map((item) => {
           const isWorkbench = item.to === '/ontology/overview';
           const to = isWorkbench && activeId ? `/ontology/overview/${activeId}` : item.to;
-          return <NavLink key={item.to} to={to} end title={collapsed ? item.label : undefined} className={({ isActive }) => `ontology-tree-item ${(isActive || (isWorkbench && location.pathname.startsWith('/ontology/overview'))) ? 'active' : ''}`}><item.icon size={17} /><span>{item.label}</span></NavLink>;
+          return <NavLink key={item.to} to={to} end title={collapsed ? item.label : undefined} className={({ isActive }) => `ontology-tree-item ${item.child ? 'child' : ''} ${(isActive || (isWorkbench && location.pathname.startsWith('/ontology/overview'))) ? 'active' : ''}`}><item.icon size={17} /><span>{item.label}</span></NavLink>;
         })}
       </section>;
     })}</nav>
@@ -244,6 +247,7 @@ export default function App() {
           <Route path="/ontology/overview" element={<OntologyWorkspace {...pageProps} ontologies={ontologies} onCreate={() => setCreateOpen(true)} />} />
           <Route path="/ontology/overview/:ontologyId" element={<OntologyWorkspace {...pageProps} ontologies={ontologies} onCreate={() => setCreateOpen(true)} />} />
           <Route path="/ontology/model/object-types" element={<ObjectTypes {...pageProps} />} />
+          <Route path="/ontology/model/object-properties" element={<ObjectProperties {...pageProps} />} />
           <Route path="/ontology/model/domains" element={<DomainHierarchy {...pageProps} />} />
           <Route path="/ontology/build" element={<Navigate to={activeId ? `/ontology/overview/${activeId}` : '/ontology/overview'} replace />} />
           <Route path="/ontology/build/legacy" element={<AIBuilder {...pageProps} ontologies={ontologies} />} />

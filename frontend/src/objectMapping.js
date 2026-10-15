@@ -29,7 +29,7 @@ export function governanceFieldCandidates(fields = []) {
   }));
 }
 
-const isConfirmedMapping = (mapping) => {
+export const isConfirmedMapping = (mapping) => {
   if (mapping.binding_mode !== 'governed') return false;
   if (mapping.design_status != null && String(mapping.design_status).trim()) {
     return ['已确认', 'validated', 'confirmed'].includes(mapping.design_status);
