@@ -241,3 +241,7 @@ ontology-platform/
 - Agent 只能通过已发布的对象查询、关系查询、规则函数和 Action 工具工作，并继承当前用户权限。
 - Action 网关必须具备参数校验、授权、审批/确认、幂等、超时、重试、补偿和审计。
 - AI Proposal 必须保存证据定位、置信度、变更理由、与基线的差异和风险等级，并持续评测接受率和正确率。
+
+## 发布与回滚
+
+GitHub 仓库 [YJ-yuejun/ontology-platform](https://github.com/YJ-yuejun/ontology-platform) 是本体原型的正式发布与备份位置。后续发布将提交项目源码、运行所需配置和 README，并推送到 `main`；稳定版本使用 `v` 前缀标签保存，便于按标签恢复。需求文档、设计稿和演示数据库不纳入发布仓库。
