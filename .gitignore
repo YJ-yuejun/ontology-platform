@@ -1,0 +1,9 @@
+.venv/
+frontend/node_modules/
+frontend/dist/
+data/*.db
+data/*.credential.key
+__pycache__/
+*.pyc
+.DS_Store
+.env

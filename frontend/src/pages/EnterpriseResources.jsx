@@ -1,0 +1,74 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
+import { FileCode2, Pencil, Plus, Search, ShieldCheck, Trash2, Workflow } from 'lucide-react';
+import { api, formatTime } from '../api';
+import Modal from '../components/Modal';
+import ResourceHistoryLink from '../components/ResourceHistoryLink';
+import useHistoryResourceFocus from '../hooks/useHistoryResourceFocus';
+import { ErrorState, Loading } from '../components/StateViews';
+import PaginationBar from '../components/PaginationBar';
+
+const KINDS = {
+  capabilities: { label: '接口能力', singular: '接口能力', icon: Workflow, hint: '登记企业系统可调用的能力，以及与本体行动的对应关系' },
+  'action-mappings': { label: '动作执行映射', singular: '动作执行映射', icon: FileCode2, hint: '把本体动作绑定到已登记能力，配置参数、结果和失败处理' },
+  'permission-policies': { label: '权限策略', singular: '权限策略', icon: ShieldCheck, hint: '统一约束对象可见性、数据修改和动作执行边界' },
+};
+const VIEW_KINDS = { execution: ['capabilities', 'action-mappings'], security: ['permission-policies'] };
+const CORE_KEYS = ['id','ontology_id','code','name','category','status','description','created_at','updated_at','created_by','updated_by'];
+const emptyForm = () => ({ code: '', name: '', category: '', status: 'draft', description: '', payload: { design_status: '设计中' } });
+const idLabels = { capabilities: '接口ID', 'action-mappings': '映射ID', 'permission-policies': '权限ID' };
+const valueLabels = { draft: '工作状态', active: '已启用', deprecated: '已停用' };
+
+const templateFields = {
+  capabilities: [['target_object', '适用对象'], ['input', '输入'], ['output', '输出'], ['action_display', '对应行动'], ['target_system', '目标系统'], ['invoke_mode', '调用方式'], ['version', '版本'], ['owner', '负责人']],
+  'action-mappings': [['action_code', '行动ID'], ['target_system', '目标系统'], ['interface_name', '接口/能力'], ['invoke_mode', '调用方式'], ['input_parameters', '输入参数'], ['parameter_mapping', '参数映射'], ['result_mapping', '返回结果'], ['success_criteria', '成功判定'], ['error_policy', '失败处理'], ['writeback_object', '回写对象'], ['writeback_property', '回写属性'], ['audit_required', '审计'], ['owner', '负责人']],
+  'permission-policies': [['resource_type', '资源类型'], ['resource_ref', '对象/关系/行动'], ['role', '角色'], ['view', '查看'], ['modify', '修改'], ['execute', '执行'], ['data_scope', '数据范围'], ['approval_requirement', '审批要求'], ['audit_requirement', '审计要求'], ['permission_basis', '权限依据'], ['owner', '负责人']],
+};
+const asText = (value) => value == null ? '' : value === true ? '是' : value === false ? '否' : typeof value === 'string' ? value : Array.isArray(value) ? value.join('、') : typeof value === 'object' ? Object.entries(value).map(([key, item]) => `${key} → ${item}`).join('\n') : String(value);
+
+function PayloadForm({ kind, payload, setPayload, actions, capabilities, objects, links }) {
+  const set = (key, value) => setPayload({ ...payload, [key]: value });
+  const field = (key, label, required = false, multiline = false) => <label key={key}><span>{label}</span>{multiline
+    ? <textarea required={required} value={asText(payload[key])} onChange={(event) => set(key, event.target.value)} />
+    : <input required={required} value={asText(payload[key])} onChange={(event) => set(key, event.target.value)} />}</label>;
+  if (kind === 'capabilities') return <div className="form-section"><h3>能力定义</h3><div className="form-grid two">
+    {field('target_object', '适用对象')}{field('action_display', '对应行动')}{field('target_system', '目标系统', true)}{field('invoke_mode', '调用方式', true)}{field('version', '版本')}{field('owner', '负责人')}
+  </div>{field('input', '输入', false, true)}{field('output', '输出', false, true)}</div>;
+  if (kind === 'action-mappings') return <div className="form-section"><h3>行动与接口能力</h3><div className="form-grid two">
+    <label><span>行动ID</span><select required value={payload.action_code || ''} onChange={(event) => set('action_code', event.target.value)}><option value="">请选择行动</option>{payload.action_code && !actions.some((item) => (item.external_id || item.name) === payload.action_code) && <option value={payload.action_code}>{payload.action_code}（历史原值）</option>}{actions.map((item) => <option key={item.id} value={item.external_id || item.name}>{item.display_name} · {item.external_id || item.name}</option>)}</select></label>
+    {field('target_system', '目标系统', true)}<label><span>接口/能力</span><select required value={payload.interface_name || ''} onChange={(event) => { const value = event.target.value; const match = capabilities.find((item) => item.name === value); setPayload({ ...payload, interface_name: value, capability_code: match?.code || '' }); }}><option value="">请选择已登记接口能力</option>{payload.interface_name && !capabilities.some((item) => item.name === payload.interface_name) && <option value={payload.interface_name}>{payload.interface_name}（模板原值）</option>}{capabilities.map((item) => <option key={item.id} value={item.name}>{item.name} · {item.code}</option>)}</select></label>{field('invoke_mode', '调用方式')}{field('input_parameters', '输入参数')}{field('success_criteria', '成功判定')}{field('error_policy', '失败处理')}{field('writeback_object', '回写对象')}{field('writeback_property', '回写属性')}{field('owner', '负责人')}
+    <label><span>审计</span><select value={payload.audit_required === true || payload.audit_required === '是' ? '是' : payload.audit_required === false || payload.audit_required === '否' ? '否' : ''} onChange={(event) => set('audit_required', event.target.value)}><option value="">请选择</option><option>是</option><option>否</option></select></label>
+  </div>{field('parameter_mapping', '参数映射', false, true)}{field('result_mapping', '返回结果', false, true)}</div>;
+  const resourceNames = [...objects.map((item) => item.display_name), ...links.map((item) => item.display_name), ...actions.map((item) => item.display_name)];
+  return <div className="form-section"><h3>授权定义</h3><div className="form-grid two">
+    {field('resource_type', '资源类型', true)}<label><span>对象/关系/行动</span><input required list="permission-resource-list" value={payload.resource_ref || ''} onChange={(event) => set('resource_ref', event.target.value)} /><datalist id="permission-resource-list">{resourceNames.map((name) => <option key={name} value={name} />)}</datalist></label>{field('role', '角色', true)}
+    {['view', 'modify', 'execute'].map((key) => <label key={key}><span>{dictLabel[key]}</span><select value={asText(payload[key])} onChange={(event) => set(key, event.target.value)}><option value="">请选择</option><option>是</option><option>否</option><option>受限</option>{payload[key] && !['是', '否', '受限'].includes(payload[key]) && <option value={payload[key]}>{payload[key]}（历史原值）</option>}</select></label>)}
+    {field('data_scope', '数据范围')}{field('approval_requirement', '审批要求')}{field('audit_requirement', '审计要求')}{field('permission_basis', '权限依据')}{field('owner', '负责人')}
+  </div></div>;
+}
+const dictLabel = { view: '查看', modify: '修改', execute: '执行' };
+
+export default function EnterpriseResources({ activeId, view = 'execution', notify }) {
+  const location = useLocation();
+  const kinds=VIEW_KINDS[view] || VIEW_KINDS.execution; const [kind,setKind]=useState(kinds[0]); const [items,setItems]=useState([]); const [selected,setSelected]=useState(null); const [query,setQuery]=useState(''); const [page,setPage]=useState(1); const [pageSize,setPageSize]=useState(20); const [error,setError]=useState(''); const [loading,setLoading]=useState(true); const [open,setOpen]=useState(false); const [editing,setEditing]=useState(null); const [form,setForm]=useState(emptyForm()); const [busy,setBusy]=useState(false); const [actions,setActions]=useState([]); const [objects,setObjects]=useState([]); const [links,setLinks]=useState([]); const [capabilities,setCapabilities]=useState([]);
+  useEffect(() => setKind(kinds[0]),[view]);
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('from_history') !== '1') return;
+    if (view === 'execution' && params.get('resource_type') === 'action_mapping') setKind('action-mappings');
+  }, [view, location.search]);
+  const load=async () => { setLoading(true); setError(''); try { const [rows,actionRows,objectRows,linkRows,capRows]=await Promise.all([api(`/api/ontologies/${activeId}/enterprise/${kind}`),api(`/api/ontologies/${activeId}/actions`),api(`/api/ontologies/${activeId}/object-types`),api(`/api/ontologies/${activeId}/link-types`),api(`/api/ontologies/${activeId}/enterprise/capabilities`)]); setItems(rows); setActions(actionRows); setObjects(objectRows); setLinks(linkRows); setCapabilities(capRows); setSelected((old)=>rows.find((item)=>item.id===old?.id)||rows[0]||null); } catch(e){setError(e.message);} finally {setLoading(false);} };
+  useEffect(()=>{load();},[activeId,kind]);
+  const visible=useMemo(()=>items.filter((item)=>`${item.code} ${item.name} ${item.category} ${item.description||''}`.toLowerCase().includes(query.toLowerCase())),[items,query]); const pages=Math.max(1,Math.ceil(visible.length/pageSize)); const currentPage=Math.min(page,pages); const pageRows=visible.slice((currentPage-1)*pageSize,currentPage*pageSize); const meta=KINDS[kind];
+  useHistoryResourceFocus({ resourceTypes: kind === 'capabilities' ? ['capability', 'capabilitie'] : kind === 'action-mappings' ? ['action_mapping'] : ['permission_policy', 'permission_policie'], items, visible, pageSize, setPage, onSelect: setSelected, ready: !loading });
+  useEffect(()=>{setPage(1);},[kind,query,pageSize]);
+  const payloadOf=(item)=>Object.fromEntries(Object.entries(item||{}).filter(([key])=>!CORE_KEYS.includes(key)));
+  const beginCreate=()=>{setEditing(null);setForm(emptyForm());setOpen(true);}; const beginEdit=()=>{if(!selected)return;setEditing(selected);setForm({code:selected.code,name:selected.name,category:selected.category||'',status:selected.status||'draft',description:selected.description||'',payload:{...payloadOf(selected),design_status:selected.design_status||selected.template_raw?.状态||'设计中'}});setOpen(true);};
+  const save=async(event)=>{event.preventDefault();setBusy(true);try{const payload={...form.payload};const name=kind==='capabilities'?form.name:kind==='action-mappings'?`${payload.action_code} · ${payload.interface_name}`:`${payload.role} · ${payload.resource_ref}`;const category=kind==='capabilities'?form.category:kind==='action-mappings'?'行动执行映射':payload.resource_type;const body={...form,name,category,payload};const path=editing?`/api/ontologies/${activeId}/enterprise/${kind}/${editing.id}`:`/api/ontologies/${activeId}/enterprise/${kind}`;await api(path,{method:editing?'PUT':'POST',body:JSON.stringify(body)});setOpen(false);await load();notify(`${meta.singular}已保存`);}catch(e){notify(e.message);}finally{setBusy(false);}};
+  const remove=async()=>{if(!selected||!window.confirm(`确定删除“${selected.name}”吗？`))return;try{await api(`/api/enterprise/${kind}/${selected.id}`,{method:'DELETE'});load();}catch(e){notify(e.message);}};
+  if(error)return <ErrorState message={error} onRetry={load}/>;
+  const entries=selected?templateFields[kind].map(([key,label])=>[label,selected[key]]):[];
+  return <div className="enterprise-resource-page"><section className="enterprise-page-intro"><div><span>企业本体 · {meta.label}</span><h2>{meta.label}</h2><p>{meta.hint}</p></div><button className="oma-button" onClick={beginCreate}><Plus size={16}/>新建{meta.singular}</button></section>{kinds.length>1&&<nav className="enterprise-tabs">{kinds.map((value)=>{const item=KINDS[value];return <button className={kind===value?'active':''} key={value} onClick={()=>setKind(value)}><item.icon size={16}/>{item.label}</button>;})}</nav>}<section className="enterprise-toolbar"><label><Search size={16}/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder={`搜索${meta.label}名称、编码或说明`}/></label><span>共 {items.length} 项 · 显示 {visible.length} 项</span></section>{loading?<Loading/>:<div className="enterprise-master-detail"><section className="enterprise-records"><header><span>{idLabels[kind]}</span><span>名称</span><span>类型</span><span>状态</span><span>更新时间</span></header>{pageRows.map((item)=><button key={item.id} className={selected?.id===item.id?'selected':''} onClick={()=>setSelected(item)}><code>{item.code}</code><strong>{item.name}</strong><span>{item.category||'—'}</span><em>{item.design_status||item.template_raw?.状态||valueLabels[item.status]||item.status}</em><time>{formatTime(item.updated_at)}</time></button>)}<PaginationBar page={currentPage} pageSize={pageSize} total={visible.length} onPageChange={setPage} onPageSizeChange={(size)=>{setPageSize(size);setPage(1);}} /></section><aside className="enterprise-record-inspector">{selected?<><header><span>资源详情</span><div><ResourceHistoryLink resourceType={kind === 'capabilities' ? 'capability' : kind === 'action-mappings' ? 'action_mapping' : 'permission_policy'} resourceId={selected.id} /><button onClick={beginEdit}><Pencil size={14}/>编辑</button><button className="danger" onClick={remove}><Trash2 size={14}/>删除</button></div></header><div className="enterprise-record-title"><i><meta.icon size={20}/></i><div><h3>{selected.name}</h3><code>{selected.code}</code></div></div><section><strong>模板字段</strong>{entries.map(([label,value])=><div className="enterprise-kv" key={label}><span><b>{label}</b></span><span>{asText(value)||'—'}</span></div>)}<div className="enterprise-kv"><span><b>状态</b></span><span>{selected.design_status||selected.template_raw?.状态||valueLabels[selected.status]||selected.status}</span></div></section></>:null}</aside></div>}
+    {open&&<Modal wide title={`${editing?'编辑':'新建'}${meta.singular}`} subtitle="按本体建模模板填写" onClose={()=>setOpen(false)} footer={<><button className="btn secondary" onClick={()=>setOpen(false)}>取消</button><button className="btn primary" form="enterprise-resource-form" disabled={busy}>{busy?'保存中…':'保存'}</button></>}><form id="enterprise-resource-form" className="form-sections" onSubmit={save}><div className="form-section"><h3>基本信息</h3><div className="form-grid two"><label><span>{idLabels[kind]}</span><input required disabled={Boolean(editing)} value={form.code} onChange={(e)=>setForm({...form,code:e.target.value})}/></label>{kind==='capabilities'&&<><label><span>接口/能力名称</span><input required value={form.name} onChange={(e)=>setForm({...form,name:e.target.value})}/></label><label><span>能力类型</span><input required value={form.category} onChange={(e)=>setForm({...form,category:e.target.value})}/></label></>}<label><span>状态</span><input list="template-design-statuses" value={form.payload.design_status||''} onChange={(e)=>setForm({...form,payload:{...form.payload,design_status:e.target.value}})} /><datalist id="template-design-statuses"><option value="设计中"/><option value="已确认"/></datalist></label></div></div><PayloadForm kind={kind} payload={form.payload} setPayload={(payload)=>setForm({...form,payload})} actions={actions} capabilities={capabilities} objects={objects} links={links}/></form></Modal>}
+  </div>;
+}

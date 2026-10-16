@@ -1,0 +1,117 @@
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, CircleDot, Clock3, Pencil, Play, Plus, Search, ShieldAlert, Trash2, Workflow } from 'lucide-react';
+import { api, formatTime } from '../api';
+import Modal from '../components/Modal';
+import ResourceHistoryLink from '../components/ResourceHistoryLink';
+import useHistoryResourceFocus from '../hooks/useHistoryResourceFocus';
+import { EmptyState, ErrorState, Loading } from '../components/StateViews';
+import PaginationBar from '../components/PaginationBar';
+
+const STEP_TYPES = [['object_resolve', '定位对象'], ['link_traverse', '穿透关系'], ['mapping_read', '读取数据映射'], ['rule_execute', '执行规则'], ['action_propose', '提议动作'], ['approval', '人工审批'], ['verify', '验证结果']];
+const STEP_LABELS = Object.fromEntries(STEP_TYPES);
+const FAILURE_LABELS = { stop: '终止场景', manual: '转人工处理', continue: '记录后继续' };
+const statusLabel = { active: '已启用', draft: '工作状态', proposal: '建议中', deprecated: '已停用' };
+const triggerLabel = { manual: '人工发起', event: '业务事件', scheduled: '定时运行', api: '接口调用' };
+const emptyForm = () => ({ code: '', name: '', category: '', status: 'draft', description: '', business_goal: '', trigger_type: 'manual', trigger_condition: '', entry_object: '', owner: '', participants: '', input_data: '', connected_systems: '', output_change: '', acceptance_criteria: '', related_objects: [], related_links: [], related_rules: [], related_actions: [], source_codes: [], related_mappings: [], steps: [] });
+const split = (value) => value.split(/[\n,，]/).map((item) => item.trim()).filter(Boolean);
+const join = (value) => Array.isArray(value) ? value.join('\n') : (value || '');
+const unique = (items) => [...new Set(items.filter(Boolean))];
+const normalizeSteps = (steps) => steps.map((item, index) => ({ ...item, order: index + 1 }));
+
+function ChoiceGrid({ title, items, value, onChange, valueKey = 'name', labelKey = 'display_name', codeKey = 'name' }) {
+  const toggle = (code) => onChange(value.includes(code) ? value.filter((item) => item !== code) : [...value, code]);
+  return <fieldset className="compact-check-field"><legend>{title}</legend><div className="compact-check-list">{items.map((item) => { const code = item[valueKey]; return <label key={item.id || code}><input type="checkbox" checked={value.includes(code)} onChange={() => toggle(code)} /><span><b>{item[labelKey]}</b><code>{item[codeKey]}</code></span></label>; })}{!items.length && <em>尚无可选资源，请先在对应建模页建立定义。</em>}</div></fieldset>;
+}
+
+function generateSteps(form, actions = []) {
+  const steps = [];
+  const add = (type, resourceRef, detail, extra = {}) => steps.push({ order: steps.length + 1, name: resourceRef ? `${STEP_LABELS[type]}：${resourceRef}` : STEP_LABELS[type], type, resource_ref: resourceRef || '', detail, on_failure: ['mapping_read', 'action_propose', 'verify'].includes(type) ? 'manual' : 'stop', approval_required: type === 'action_propose', ...extra });
+  if (form.entry_object) add('object_resolve', form.entry_object, `以 ${form.entry_object} 作为场景入口对象`);
+  form.related_links.forEach((code) => add('link_traverse', code, `沿关系 ${code} 扩展业务上下文`));
+  form.related_mappings.forEach((code) => add('mapping_read', code, `通过映射 ${code} 读取受治理数据`));
+  form.related_rules.forEach((code) => add('rule_execute', code, `执行确定性规则 ${code}`));
+  form.related_actions.forEach((code) => add('action_propose', code, `形成动作 ${code} 的受控执行建议`, { approval_required: Boolean(actions.find((item) => item.name === code)?.approval_required) }));
+  add('verify', '', form.output_change || '验证场景输出并记录审计', { state_change: true });
+  return steps;
+}
+
+export default function ScenarioStudio({ activeId, notify }) {
+  const [items, setItems] = useState(null); const [runs, setRuns] = useState([]); const [selected, setSelected] = useState(null); const [run, setRun] = useState(null);
+  const [objects, setObjects] = useState([]); const [links, setLinks] = useState([]); const [rules, setRules] = useState([]); const [actions, setActions] = useState([]); const [sources, setSources] = useState([]); const [mappings, setMappings] = useState([]);
+  const [query, setQuery] = useState(''); const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(20); const [editing, setEditing] = useState(null); const [form, setForm] = useState(emptyForm()); const [busy, setBusy] = useState(''); const [error, setError] = useState('');
+
+  const load = async (preferredId) => {
+    setError('');
+    try {
+      const [scenarios, history, objectRows, linkRows, ruleRows, actionRows, sourceRows, mappingRows] = await Promise.all([
+        api(`/api/ontologies/${activeId}/enterprise/business-scenarios`), api(`/api/ontologies/${activeId}/scenario-runs`), api(`/api/ontologies/${activeId}/object-types`), api(`/api/ontologies/${activeId}/link-types`), api(`/api/ontologies/${activeId}/business-rules`), api(`/api/ontologies/${activeId}/actions`), api(`/api/ontologies/${activeId}/enterprise/data-sources`), api(`/api/ontologies/${activeId}/enterprise/data-mappings`),
+      ]);
+      setItems(scenarios); setRuns(history); setObjects(objectRows); setLinks(linkRows); setRules(ruleRows); setActions(actionRows); setSources(sourceRows); setMappings(mappingRows);
+      setSelected((old) => scenarios.find((item) => item.id === (preferredId || old?.id)) || scenarios[0] || null);
+      setRun((old) => history.find((item) => item.id === old?.id) || history[0] || null);
+    } catch (e) { setError(e.message); }
+  };
+  useEffect(() => { setItems(null); setRun(null); load(); }, [activeId]);
+  const visible = useMemo(() => (items || []).filter((item) => `${item.code} ${item.name} ${item.category} ${item.business_goal || ''}`.toLowerCase().includes(query.toLowerCase())), [items, query]);
+  const pages = Math.max(1, Math.ceil(visible.length / pageSize)); const currentPage = Math.min(page, pages); const pageRows = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  useEffect(() => { setPage(1); }, [query, pageSize]);
+  useHistoryResourceFocus({ resourceTypes: ['business_scenario'], items, visible, pageSize, setPage, onSelect: setSelected, ready: Boolean(items) });
+  const selectedRun = run?.scenario_id === selected?.id ? run : runs.find((item) => item.scenario_id === selected?.id);
+  const path = (selected?.key_path || selected?.description || '').split(/\s*(?:→|->)\s*/).filter(Boolean);
+  const sourceLabel = (code) => sources.find((item) => item.code === code)?.name || code;
+  const mappingLabel = (code) => mappings.find((item) => item.code === code)?.name || code;
+  const openCreate = () => { setEditing({ create: true }); setForm(emptyForm()); };
+  const openEdit = () => { if (!selected) return; setEditing(selected); setForm({ ...emptyForm(), ...selected, trigger_condition: selected.trigger_condition || selected.trigger || '', input_data: selected.input_data || join(selected.input_data_items), connected_systems: selected.connected_systems || join(selected.source_systems), participants: join(selected.participants), acceptance_criteria: join(selected.acceptance_criteria), related_objects: selected.related_objects || [], related_links: selected.related_links || [], related_rules: selected.related_rules || selected.related_logic || [], related_actions: selected.related_actions || [], source_codes: selected.source_codes || [], related_mappings: selected.related_mappings || [], steps: Array.isArray(selected.steps) && selected.steps.every((step) => typeof step === 'object') ? selected.steps : [] }); };
+  const save = async (event) => {
+    event.preventDefault(); setBusy('save');
+    const { participants, acceptance_criteria, related_objects, related_links, related_rules, related_actions, source_codes, related_mappings, steps, ...base } = form;
+    const objectLabels = related_objects.map((code) => objects.find((item) => item.name === code)?.display_name || code);
+    const payload = { business_goal: base.business_goal, trigger_type: base.trigger_type, trigger_condition: base.trigger_condition, trigger: base.trigger_condition, entry_object: related_objects.includes(base.entry_object) ? base.entry_object : related_objects[0] || '', owner: base.owner, key_path: objectLabels.join(' → '), input_data: base.input_data, connected_systems: base.connected_systems, output_change: base.output_change, participants: split(participants), acceptance_criteria: split(acceptance_criteria), related_objects, related_links, related_rules, related_actions, source_codes, related_mappings, steps: normalizeSteps(steps), ...Object.fromEntries(['template_external_id', 'template_sheet', 'template_row', 'template_raw'].filter((key) => editing?.[key] !== undefined).map((key) => [key, editing[key]])) };
+    const body = { code: base.code, name: base.name, category: base.category, status: base.status, description: base.description, payload };
+    try { const saved = await api(editing?.create ? `/api/ontologies/${activeId}/enterprise/business-scenarios` : `/api/ontologies/${activeId}/enterprise/business-scenarios/${editing.id}`, { method: editing?.create ? 'POST' : 'PUT', body: JSON.stringify(body) }); setEditing(null); await load(saved.id); notify('业务场景已保存到工作状态'); } catch (e) { notify(e.message); } finally { setBusy(''); }
+  };
+  const remove = async () => { if (!selected || !window.confirm(`确定删除业务场景“${selected.name}”吗？`)) return; try { await api(`/api/enterprise/business-scenarios/${selected.id}`, { method: 'DELETE' }); setSelected(null); load(); } catch (e) { notify(e.message); } };
+  const execute = async () => { if (!selected) return; setBusy('run'); try { const result = await api(`/api/ontologies/${activeId}/scenarios/${selected.id}/run`, { method: 'POST', body: JSON.stringify({ sample_data: {} }) }); setRun(result); setRuns((old) => [result, ...old]); notify('已生成流程预览，尚未调用业务系统'); } catch (e) { notify(e.message); } finally { setBusy(''); } };
+
+  const updateResource = (field, value) => setForm((current) => ({ ...current, [field]: value, entry_object: field === 'related_objects' && !value.includes(current.entry_object) ? value[0] || '' : current.entry_object, steps: [] }));
+  const updateMappings = (codes) => setForm((current) => ({ ...current, related_mappings: codes, source_codes: unique(codes.map((code) => mappings.find((item) => item.code === code)?.source_code)), steps: [] }));
+  const resourceOptions = (type) => {
+    if (type === 'object_resolve') return objects.filter((item) => form.related_objects.includes(item.name)).map((item) => ({ code: item.name, label: item.display_name }));
+    if (type === 'link_traverse') return links.filter((item) => form.related_links.includes(item.name)).map((item) => ({ code: item.name, label: item.display_name }));
+    if (type === 'mapping_read') return mappings.filter((item) => form.related_mappings.includes(item.code)).map((item) => ({ code: item.code, label: item.name }));
+    if (type === 'rule_execute') return rules.filter((item) => form.related_rules.includes(item.name)).map((item) => ({ code: item.name, label: item.display_name }));
+    if (type === 'action_propose') return actions.filter((item) => form.related_actions.includes(item.name)).map((item) => ({ code: item.name, label: item.display_name }));
+    return [];
+  };
+  const updateStep = (index, changes) => setForm((current) => ({ ...current, steps: current.steps.map((item, itemIndex) => itemIndex === index ? { ...item, ...changes } : item) }));
+  const changeStepType = (index, type) => updateStep(index, { type, name: STEP_LABELS[type], resource_ref: '', approval_required: false, state_change: type === 'verify' });
+  const addStep = () => setForm((current) => ({ ...current, steps: normalizeSteps([...current.steps, { order: current.steps.length + 1, name: STEP_LABELS.verify, type: 'verify', resource_ref: '', detail: '', on_failure: 'manual', approval_required: false, state_change: true }]) }));
+  const moveStep = (index, direction) => setForm((current) => { const nextIndex = index + direction; if (nextIndex < 0 || nextIndex >= current.steps.length) return current; const next = [...current.steps]; [next[index], next[nextIndex]] = [next[nextIndex], next[index]]; return { ...current, steps: normalizeSteps(next) }; });
+  const deleteStep = (index) => setForm((current) => ({ ...current, steps: normalizeSteps(current.steps.filter((_, itemIndex) => itemIndex !== index)) }));
+
+  if (error) return <ErrorState message={error} onRetry={() => load()} />;
+  if (!items) return <Loading />;
+  return <div className="scenario-studio">
+    <section className="scenario-header"><div><span>场景驱动建模</span><h2>业务场景</h2><p>记录业务目标、对象关系、规则和行动；执行步骤可在语义模型建立后配置。</p></div><button className="oma-button" onClick={openCreate}><Plus size={16} /> 新建业务场景</button></section>
+    <div className="scenario-layout">
+      <aside className="scenario-list"><label><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索场景、目标或编码" /></label><header><strong>场景目录</strong><span>{visible.length} 项</span></header>{pageRows.map((item) => <button key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => { setSelected(item); setRun(runs.find((value) => value.scenario_id === item.id) || null); }}><i><Workflow size={17} /></i><span><b>{item.name}</b><code>{item.code}</code><small>{item.category || '未分类'} · {statusLabel[item.status] || item.status}</small></span><ChevronRight size={15} /></button>)}{!visible.length && <EmptyState title="暂无业务场景" description="从一个真实的业务问题开始建立场景。" />}<PaginationBar page={currentPage} pageSize={pageSize} total={visible.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} /></aside>
+      <main className="scenario-canvas">{selected ? <><header><div><span>{selected.category || '业务场景'}</span><h3>{selected.name}</h3><code>{selected.code}</code></div><div><ResourceHistoryLink resourceType="business_scenario" resourceId={selected.id} /><button onClick={openEdit}><Pencil size={14} /> 编辑设计</button><button className="danger-link" onClick={remove}><Trash2 size={14} /> 删除</button><button className="oma-button" disabled={busy === 'run' || !Array.isArray(selected.steps) || !selected.steps.some((step) => step && typeof step === 'object')} title="需要先配置结构化执行步骤；预览不会调用真实系统" onClick={execute}><Play size={15} />{busy === 'run' ? '生成中…' : '预览执行流程'}</button></div></header>
+        <section className="scenario-goal"><CircleDot size={18} /><div><span>业务目标</span><strong>{selected.business_goal || selected.description || '尚未定义'}</strong><small>触发：{selected.trigger || '按需运行'} · 责任人：{selected.owner || '待指定'}</small></div></section>
+        <section className="scenario-path"><div className="section-caption"><strong>关键业务路径</strong><span>入口对象：{selected.entry_object || '未定义'}</span></div><div>{path.length ? path.map((item, index) => <span key={`${item}-${index}`}><b>{item}</b>{index < path.length - 1 && <ChevronRight size={18} />}</span>) : <p>请补充关键对象关系路径。</p>}</div></section>
+        <section className="scenario-plan"><div className="section-caption"><strong>执行步骤（可选）</strong><span>{selected.steps?.length || 0} 步</span></div><ol>{(selected.steps || []).map((step, index) => <li key={typeof step === 'string' ? `${index}-${step}` : `${step.order}-${step.name}`}><i>{index + 1}</i><span><b>{typeof step === 'string' ? step : step.name}</b><small>{typeof step === 'string' ? '历史文本步骤' : `${STEP_LABELS[step.type] || step.type} · ${step.detail || '未填写说明'}`}</small></span>{typeof step === 'object' && step.approval_required && <em>需人工确认</em>}</li>)}</ol></section>
+        <div className="scenario-resource-grid"><section><strong>对象与数据</strong><dl><div><dt>主要对象</dt><dd>{(selected.related_objects || []).join('、') || selected.entry_object || '—'}</dd></div><div><dt>输入数据</dt><dd>{selected.input_data || '—'}</dd></div><div><dt>关联系统</dt><dd>{selected.connected_systems || (selected.source_systems || []).join('、') || '—'}</dd></div><div><dt>关联数据映射</dt><dd>{(selected.related_mappings || []).map(mappingLabel).join('、') || '—'}</dd></div></dl></section><section><strong>决策与执行</strong><dl><div><dt>关联规则</dt><dd>{(selected.related_rules || selected.related_logic || []).join('、') || '—'}</dd></div><div><dt>关联动作</dt><dd>{(selected.related_actions || []).join('、') || '—'}</dd></div><div><dt>输出/状态变化</dt><dd>{selected.output_change || '—'}</dd></div></dl></section></div>
+        {(selected.acceptance_criteria || []).length > 0 && <section className="scenario-acceptance"><strong>历史验收口径</strong>{selected.acceptance_criteria.map((item) => <span key={item}><CheckCircle2 size={14} />{item}</span>)}</section>}
+      </> : <EmptyState title="选择一个场景" description="查看业务目标、对象关系与规则行动。" />}</main>
+      <aside className="scenario-run-panel"><header><strong>流程预览记录</strong>{selectedRun && <span>{formatTime(selectedRun.created_at)}</span>}</header><p className="form-hint">仅展示配置的流程轨迹，未读取实时数据，也未调用规则引擎或业务系统。</p>{selectedRun ? <><div className="scenario-result"><ShieldAlert size={19} /><span><b>{selectedRun.result?.conclusion}</b><small>已配置 {selectedRun.result?.configured_rule_steps ?? '—'} 个规则步骤；实际执行结果未验证</small></span></div><ol className="scenario-run-steps">{selectedRun.steps?.map((step, index) => <li key={`${step.stage}-${index}`}><i><Clock3 size={14} /></i><span><b>{step.stage}</b><small>{step.detail}</small><code>{step.tool}</code></span></li>)}</ol><section className="scenario-action-result"><strong>拟执行动作</strong><span>{selectedRun.result?.action || '无'}</span><em>尚未执行</em></section></> : <div className="scenario-run-empty"><Play size={28} /><strong>尚无流程预览</strong><span>配置执行步骤后，可查看拟执行路径。</span></div>}</aside>
+    </div>
+    {editing && <Modal wide title={editing.create ? '新建业务场景' : `编辑场景 · ${editing.name}`} subtitle="用已建模资源组装可运行、可验收的业务闭环" onClose={() => setEditing(null)} footer={<><button className="btn secondary" onClick={() => setEditing(null)}>取消</button><button className="btn primary" form="scenario-form" disabled={busy === 'save'}>{busy === 'save' ? '保存中…' : '保存场景'}</button></>}>
+      <form id="scenario-form" className="form-sections" onSubmit={save}>
+        <div className="form-section"><h3>1. 场景基本信息</h3><div className="form-grid two"><label><span>场景ID</span><input required disabled={!editing.create} value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="SCN-001" /></label><label><span>业务场景</span><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label><span>负责人</span><input required value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} /></label><label><span>状态</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}><option value="draft">工作状态</option><option value="active">已启用</option><option value="deprecated">已停用</option></select></label></div><label><span>业务目标/任务</span><textarea required value={form.business_goal} onChange={(e) => setForm({ ...form, business_goal: e.target.value })} /></label><label><span>触发条件</span><input required value={form.trigger_condition} onChange={(e) => setForm({ ...form, trigger_condition: e.target.value })} placeholder="例如：压力超过管段配置上限" /></label></div>
+        <div className="form-section"><h3>2. 业务语义与数据</h3><ChoiceGrid title="主要对象" items={objects} value={form.related_objects} onChange={(value) => updateResource('related_objects', value)} /><ChoiceGrid title="关键关系" items={links} value={form.related_links} onChange={(value) => updateResource('related_links', value)} /><ChoiceGrid title="业务规则/判断" items={rules} value={form.related_rules} onChange={(value) => updateResource('related_rules', value)} /><ChoiceGrid title="业务行动" items={actions} value={form.related_actions} onChange={(value) => updateResource('related_actions', value)} /><label><span>输入数据</span><textarea value={form.input_data || ''} onChange={(e) => setForm({ ...form, input_data: e.target.value })} placeholder="例如：压力、流量、任务状态" /></label><label><span>关联系统</span><textarea value={form.connected_systems || ''} onChange={(e) => setForm({ ...form, connected_systems: e.target.value })} placeholder="例如：监测系统、调度系统" /></label><label><span>输出/状态变化</span><textarea required value={form.output_change} onChange={(e) => setForm({ ...form, output_change: e.target.value })} /></label></div>
+        <details className="form-section" open={form.steps.length > 0 ? true : undefined}><summary>执行流程（可选）</summary><p className="form-hint">场景语义可以先保存；配置步骤后才可预览执行路径。</p><ChoiceGrid title="关联数据映射" items={mappings} value={form.related_mappings} onChange={updateMappings} valueKey="code" labelKey="name" codeKey="code" /><div className="form-section-heading"><div><h3>执行步骤</h3><p>步骤引用已选资源；需要审批的动作应开启人工确认。</p></div><div><button type="button" disabled={!form.related_objects.length} onClick={() => setForm({ ...form, steps: generateSteps(form, actions) })}><Workflow size={14} /> 根据资源生成</button><button type="button" disabled={!form.related_objects.length} onClick={addStep}><Plus size={14} /> 添加步骤</button></div></div>
+          <div className="scenario-step-editor">{form.steps.map((step, index) => { const options = resourceOptions(step.type); return <article key={`${index}-${step.type}`}><div className="step-order"><b>{index + 1}</b><button type="button" title="上移" onClick={() => moveStep(index, -1)} disabled={index === 0}><ArrowUp size={13} /></button><button type="button" title="下移" onClick={() => moveStep(index, 1)} disabled={index === form.steps.length - 1}><ArrowDown size={13} /></button></div><div className="step-fields"><div><label><span>步骤类型</span><select value={step.type} onChange={(e) => changeStepType(index, e.target.value)}>{STEP_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label><span>引用资源</span>{options.length ? <select required value={step.resource_ref || ''} onChange={(e) => updateStep(index, { resource_ref: e.target.value, name: `${STEP_LABELS[step.type]}：${e.target.value}`, approval_required: step.type === 'action_propose' ? Boolean(actions.find((item) => item.name === e.target.value)?.approval_required) : step.approval_required })}><option value="">请选择</option>{options.map((item) => <option key={item.code} value={item.code}>{item.label} · {item.code}</option>)}</select> : <input disabled value={['approval', 'verify'].includes(step.type) ? '无需引用资源' : '请先在上一步选择资源'} />}</label><label><span>失败策略</span><select value={step.on_failure || 'stop'} onChange={(e) => updateStep(index, { on_failure: e.target.value })}>{Object.entries(FAILURE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div><label><span>步骤名称</span><input required value={step.name} onChange={(e) => updateStep(index, { name: e.target.value })} /></label><label><span>执行说明</span><input value={step.detail || ''} onChange={(e) => updateStep(index, { detail: e.target.value })} /></label>{step.type === 'action_propose' && <label className="step-approval"><input type="checkbox" checked={Boolean(step.approval_required)} onChange={(e) => updateStep(index, { approval_required: e.target.checked })} /><span>执行前需要人工确认</span></label>}</div><button type="button" className="step-delete" onClick={() => deleteStep(index)} title="删除步骤"><Trash2 size={14} /></button></article>; })}{!form.steps.length && <div className="step-empty"><Workflow size={23} /><span>未配置执行步骤；可以只保存业务场景语义。</span></div>}</div>
+        </details>
+      </form>
+    </Modal>}
+  </div>;
+}
