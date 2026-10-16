@@ -15,10 +15,10 @@ export const emptyObjectForm = () => ({
 });
 // 对象 API 名称和属性字段名是运行时稳定引用，不能直接使用中文显示名称。
 // 之前只在后端 Pydantic 校验，用户一直填到最后一步才看到一个不易理解的 422。
-const OBJECT_API_NAME_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
+export const OBJECT_API_NAME_PATTERN = /^[A-Z][A-Za-z0-9]*$/;
 const PROPERTY_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/;
 
-const validatePropertyForm = (properties = []) => {
+export const validatePropertyForm = (properties = []) => {
   if (!properties.length) return '至少添加一项对象属性，并勾选一个主键属性。';
   const primaryKeys = properties.filter((item) => item.is_primary_key);
   if (primaryKeys.length !== 1) return '对象必须且只能有一个主键属性。';
@@ -34,7 +34,7 @@ const validatePropertyForm = (properties = []) => {
   return '';
 };
 
-const validateObjectForm = (form) => {
+export const validateObjectForm = (form) => {
   if (!String(form.display_name || '').trim()) return '请填写对象显示名称。';
   if (!OBJECT_API_NAME_PATTERN.test(String(form.name || ''))) return '稳定标识（API 名称）必须以大写英文字母开头，只能包含英文字母和数字，例如 PurchaseContract。';
   const propertyError = validatePropertyForm(form.properties);
@@ -47,7 +47,7 @@ const validateObjectForm = (form) => {
 
 // 历史（模板导入）可能留下指向不存在属性的 title_property / state_property。
 // 这类失效引用不能直接把用户挡在保存之外：先按当前属性重置，并留一句可读的解释。
-const formFromObject = (item) => {
+export const formFromObject = (item) => {
   const properties = item.properties || [];
   const keys = new Set(properties.map((property) => property.key));
   const statePropertyValid = Boolean(item.state_property) && keys.has(item.state_property);

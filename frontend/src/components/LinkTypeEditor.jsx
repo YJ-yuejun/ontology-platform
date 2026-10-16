@@ -8,7 +8,7 @@ import PropertyEditor from './PropertyEditor';
 export const LINK_CARDINALITIES = { one_to_one: '一对一', one_to_many: '一对多', many_to_one: '多对一', many_to_many: '多对多' };
 export const emptyLinkForm = () => ({ name: '', display_name: '', external_id: '', source_object_type_id: '', target_object_type_id: '', cardinality: '', description: '', status: 'experimental', design_status: 'draft', properties: [], source_system: '', source_key: '', target_key: '', is_core: false, bidirectional_display: false, reverse_display_name: '', reverse_name: '' });
 
-const formFromLink = (item) => ({ ...emptyLinkForm(), ...item, external_id: item.external_id || '', description: item.description || '', design_status: designStatusValue(item.design_status), properties: item.properties || [], source_system: item.source_system || '', source_key: item.source_key || '', target_key: item.target_key || '', is_core: Boolean(item.is_core), bidirectional_display: item.bidirectional_display !== false });
+export const formFromLink = (item) => ({ ...emptyLinkForm(), ...item, external_id: item.external_id || '', description: item.description || '', design_status: designStatusValue(item.design_status), properties: item.properties || [], source_system: item.source_system || '', source_key: item.source_key || '', target_key: item.target_key || '', is_core: Boolean(item.is_core), bidirectional_display: item.bidirectional_display !== false });
 
 // 关系 API 名称只能小写+下划线；从对象 API 名称推一个可改的默认值，省去手敲。
 const snake = (value = '') => String(value).replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[^A-Za-z0-9]+/g, '_').toLowerCase().replace(/^_+|_+$/g, '');
@@ -21,7 +21,10 @@ export const suggestLinkName = (source, target) => {
  * 关系类型新建/编辑弹窗。关系类型目录与本体图谱共用。
  * initial 用于新建时预填起点/终点（例如在图谱中从一个对象连到另一个对象）。
  */
-export default function LinkTypeEditor({ activeId, objects, editing, initial, notify, onClose, onSaved }) {
+// 不打开表单直接改关系的某个字段（如检查器里增删一项关系属性）。
+export const linkUpdatePayload = (item, patch = {}) => ({ ...formFromLink(item), ...patch });
+
+export default function LinkTypeEditor({ activeId, objects, editing, initial, copyFrom, notify, onClose, onSaved }) {
   const [form, setForm] = useState(() => {
     if (editing) return formFromLink(editing);
     const next = { ...emptyLinkForm(), ...(initial || {}) };
@@ -30,7 +33,8 @@ export default function LinkTypeEditor({ activeId, objects, editing, initial, no
     if (!next.name && source && target) next.name = suggestLinkName(source, target);
     return next;
   });
-  const [nameTouched, setNameTouched] = useState(Boolean(editing));
+  // 复制关系时 API 名称已经给出唯一的默认值，切换端点时不再自动覆盖。
+  const [nameTouched, setNameTouched] = useState(Boolean(editing || copyFrom));
   const [busy, setBusy] = useState(false);
   const objectById = (id) => objects.find((obj) => obj.id === id);
   const changeEndpoint = (key, value) => setForm((old) => {
@@ -46,7 +50,8 @@ export default function LinkTypeEditor({ activeId, objects, editing, initial, no
       await onSaved(saved);
     } catch (e) { notify(e.message); setBusy(false); }
   };
-  return <Modal wide title={editing ? `编辑关系 · ${editing.display_name}` : '新建关系类型'} subtitle="明确关系方向、业务含义与基数，避免把关系当成普通字段" onClose={onClose} footer={<><button className="btn secondary" onClick={onClose}>取消</button><button form="link-form" className="btn primary" disabled={busy}>{busy ? '保存中…' : '保存关系类型'}</button></>}>
+  return <Modal wide title={editing ? `编辑关系 · ${editing.display_name}` : copyFrom ? `复制关系 · ${copyFrom.display_name}` : '新建关系类型'} subtitle="明确关系方向、业务含义与基数，避免把关系当成普通字段" onClose={onClose} footer={<><button className="btn secondary" onClick={onClose}>取消</button><button form="link-form" className="btn primary" disabled={busy}>{busy ? '保存中…' : copyFrom ? '创建副本' : '保存关系类型'}</button></>}>
+    {copyFrom && <div className="template-field-note">已带入“{copyFrom.display_name}”的全部配置。关系 API 名称在本体内唯一，请确认名称后再保存；通常还需要调整起点或终点，否则会得到两条含义重复的关系。</div>}
     <form id="link-form" onSubmit={save} className="form-sections">
       <section className="form-section"><h3>1. 基础信息</h3><div className="form-grid two">
         <label><span>关系 ID（模板）</span><input className="mono" value={form.external_id} onChange={(e) => setForm({ ...form, external_id: e.target.value })} placeholder="例如：L-001" /></label>

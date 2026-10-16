@@ -3,14 +3,18 @@ import { DataSet } from 'vis-data';
 import { Network } from 'vis-network';
 import 'vis-network/styles/vis-network.css';
 import {
-  ArrowRight, Boxes, Check, Crosshair, Focus, GitBranch, Image as ImageIcon, KeyRound, Link2, Maximize2, Minimize2,
+  ArrowRight, Boxes, Check, Copy, Crosshair, Focus, GitBranch, Image as ImageIcon, KeyRound, Link2, Maximize2, Minimize2,
   Network as NetworkIcon, PanelRightClose, PanelRightOpen, Pencil, Plus, RefreshCw, Search, Star, Trash2, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
 import { ObjectTypeIcon } from '../components/ObjectTypeIcon';
 import ObjectTypeEditor, { objectUpdatePayload } from '../components/ObjectTypeEditor';
-import LinkTypeEditor, { LINK_CARDINALITIES } from '../components/LinkTypeEditor';
+import LinkTypeEditor, { formFromLink, LINK_CARDINALITIES } from '../components/LinkTypeEditor';
+import ObjectCopyDialog from '../components/ObjectCopyDialog';
+import { PropertyQuickEditor, PropertyRemoveDialog } from '../components/PropertyQuickEditor';
+import { SubjectDomainQuickEditor, SubjectDomainRemoveDialog } from '../components/SubjectDomainQuickEditor';
+import { copyLinkIdentity } from '../objectCopy';
 import Modal from '../components/Modal';
 import { dataTypeLabel, statusLabel } from '../labels';
 import { ErrorState, Loading } from '../components/StateViews';
@@ -42,8 +46,8 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const [showLabels, setShowLabels] = useState(true);
   const [neighborsOf, setNeighborsOf] = useState('');
   const [selection, setSelection] = useState(null); // { kind: 'node' | 'edge', id }
-  const [editor, setEditor] = useState(null); // { kind: 'object' | 'link', item?, initial? }
-  const [removing, setRemoving] = useState(null); // { kind, item }
+  const [editor, setEditor] = useState(null); // { kind: 'object' | 'link' | 'copy' | 'property' | 'subject', ... }
+  const [removing, setRemoving] = useState(null); // { kind: 'object' | 'link' | 'property' | 'subject', item, ... }
   const [menu, setMenu] = useState(null); // { x, y, kind, id }
   const [connecting, setConnecting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
@@ -230,6 +234,12 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const openCreateLink = (initial = {}) => setEditor({ kind: 'link', initial });
   const editObject = (item) => item && setEditor({ kind: 'object', item });
   const editLink = (item) => item && setEditor({ kind: 'link', item });
+  // 复制必须经过编辑：对象走专门的复制弹窗（身份 + 属性 + 关系），关系走带入全部配置的新建表单。
+  const copyObject = (item) => item && setEditor({ kind: 'copy', item });
+  const copyLink = (item) => item && setEditor({ kind: 'link', initial: { ...formFromLink(item), ...copyLinkIdentity(item, links) }, copyFrom: item });
+  const editProperty = (owner, ownerKind, propertyKey = '') => setEditor({ kind: 'property', owner, ownerKind, propertyKey });
+  const removeProperty = (owner, ownerKind, propertyKey) => setRemoving({ kind: 'property', owner, ownerKind, propertyKey });
+  const subjectById = (id) => (data?.subjects || []).find((item) => item.id === id);
   const showNeighbors = (id) => { setNeighborsOf(id); setSelection({ kind: 'node', id }); };
 
   const afterObjectSaved = async (saved) => {
@@ -239,6 +249,13 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     reveal(saved);
     notify(creating ? `已创建对象类型“${saved.display_name}”` : `已保存对象类型“${saved.display_name}”`);
   };
+  const afterCopied = async (created) => {
+    setEditor(null);
+    await load(); refreshOntologies(activeId);
+    reveal(created);
+  };
+  // 属性、主题域等“卡片级”编辑：保存后刷新，保持当前选中的对象或关系不变。
+  const afterCardSaved = async () => { setEditor(null); setRemoving(null); await load(); refreshOntologies(activeId); };
   const afterLinkSaved = async (saved) => {
     const creating = !editor?.item;
     setEditor(null);
@@ -255,8 +272,10 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
       notify(item.is_core ? `已取消“${item.display_name}”的核心对象标记` : `已将“${item.display_name}”设为核心对象`);
     } catch (e) { notify(e.message); }
   };
-  const afterRemoved = async (message) => {
-    setRemoving(null); setSelection(null);
+  // 从卡片上删掉的若不是当前选中项（如对象详情里删一条关系），保留当前选中。
+  const afterRemoved = async (message, removedId) => {
+    setRemoving(null);
+    if (!selection || selection.id === removedId) setSelection(null);
     if (neighborsOf && !objectById.has(neighborsOf)) setNeighborsOf('');
     await load(); refreshOntologies(activeId); notify(message);
   };
@@ -347,6 +366,11 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
         return;
       }
       if (event.key === 'Enter' && selection) { if (selectedObject) editObject(selectedObject); else editLink(selectedLink); return; }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'd' && selection) {
+        event.preventDefault();
+        if (selectedObject) copyObject(selectedObject); else copyLink(selectedLink);
+        return;
+      }
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === 'f') networkRef.current?.fit({ animation: { duration: 260 } });
       if (event.key === 'l') setConnecting((value) => !value);
@@ -411,6 +435,7 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
         {menu && <div className="graph-context-menu" role="menu" style={{ left: menu.x, top: menu.y }} onContextMenu={(e) => e.preventDefault()}>
           {menuObject && <><header>{menuObject.display_name}</header>
             <button role="menuitem" onClick={menuAction(() => editObject(menuObject))}><Pencil size={14} /> 编辑对象</button>
+            <button role="menuitem" onClick={menuAction(() => copyObject(menuObject))}><Copy size={14} /> 复制对象…<kbd>⌘D</kbd></button>
             <button role="menuitem" onClick={menuAction(() => openCreateLink({ source_object_type_id: menuObject.id }))}><Link2 size={14} /> 从此对象新建关系</button>
             <button role="menuitem" onClick={menuAction(() => toggleCore(menuObject))}><Star size={14} /> {menuObject.is_core ? '取消核心对象' : '设为核心对象'}</button>
             <button role="menuitem" onClick={menuAction(() => showNeighbors(menuObject.id))}><Crosshair size={14} /> 只看关联对象</button>
@@ -418,6 +443,7 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
             <hr /><button role="menuitem" className="danger" onClick={menuAction(() => setRemoving({ kind: 'object', item: menuObject }))}><Trash2 size={14} /> 删除对象</button></>}
           {menuLink && <><header>{menuLink.display_name}</header>
             <button role="menuitem" onClick={menuAction(() => editLink(menuLink))}><Pencil size={14} /> 编辑关系</button>
+            <button role="menuitem" onClick={menuAction(() => copyLink(menuLink))}><Copy size={14} /> 复制关系…<kbd>⌘D</kbd></button>
             <button role="menuitem" onClick={menuAction(() => locate(menuLink.source_object_type_id))}><ArrowRight size={14} /> 定位起点“{menuLink.source_display_name}”</button>
             <button role="menuitem" onClick={menuAction(() => locate(menuLink.target_object_type_id))}><ArrowRight size={14} /> 定位终点“{menuLink.target_display_name}”</button>
             <hr /><button role="menuitem" className="danger" onClick={menuAction(() => setRemoving({ kind: 'link', item: menuLink }))}><Trash2 size={14} /> 删除关系</button></>}
@@ -431,21 +457,46 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     </section>
     {inspectorOpen && <aside className="inspector">
       <div className="inspector-title"><NetworkIcon size={18} /><div><h3>本体检查器</h3><p>选中对象或关系后可直接编辑、删除</p></div>{selection && <button className="icon-btn" onClick={() => setSelection(null)} aria-label="取消选择" title="取消选择"><X size={15} /></button>}</div>
-      {selectedObject ? <ObjectInspector object={selectedObject} color={colorOf(selectedObject)} relations={relationsOf(selectedObject.id)} onEdit={() => editObject(selectedObject)} onRemove={() => setRemoving({ kind: 'object', item: selectedObject })} onToggleCore={() => toggleCore(selectedObject)} onNeighbors={() => showNeighbors(selectedObject.id)} onAddLink={() => openCreateLink({ source_object_type_id: selectedObject.id })} onSelectLink={(id) => setSelection({ kind: 'edge', id })} onOpenList={() => navigate('/ontology/model/object-types')} />
-        : selectedLink ? <LinkInspector link={selectedLink} onEdit={() => editLink(selectedLink)} onRemove={() => setRemoving({ kind: 'link', item: selectedLink })} onLocate={locate} />
-          : <OverviewInspector stats={stats} subjects={visibleSubjects} subjectFocus={subjectFocus} onSubject={(id) => setSubjectFocus(subjectFocus === id ? '' : id)} coreObjects={objects.filter((item) => item.is_core && scope.inScope.has(item.id))} onLocate={locate} onCreate={() => openCreateObject()} />}
+      {selectedObject ? <ObjectInspector object={selectedObject} color={colorOf(selectedObject)} relations={relationsOf(selectedObject.id)} onEdit={() => editObject(selectedObject)} onCopy={() => copyObject(selectedObject)} onRemove={() => setRemoving({ kind: 'object', item: selectedObject })} onToggleCore={() => toggleCore(selectedObject)} onNeighbors={() => showNeighbors(selectedObject.id)} onAddLink={() => openCreateLink({ source_object_type_id: selectedObject.id })} onSelectLink={(id) => setSelection({ kind: 'edge', id })} onEditLink={(id) => editLink(linkById.get(id))} onRemoveLink={(id) => setRemoving({ kind: 'link', item: linkById.get(id) })} onEditProperty={(key) => editProperty(selectedObject, 'object', key)} onRemoveProperty={(key) => removeProperty(selectedObject, 'object', key)} onAddProperty={() => editProperty(selectedObject, 'object')} onOpenList={() => navigate('/ontology/model/object-types')} />
+        : selectedLink ? <LinkInspector link={selectedLink} onEdit={() => editLink(selectedLink)} onCopy={() => copyLink(selectedLink)} onRemove={() => setRemoving({ kind: 'link', item: selectedLink })} onLocate={locate} onEditObject={(id) => editObject(objectById.get(id))} onEditProperty={(key) => editProperty(selectedLink, 'link', key)} onRemoveProperty={(key) => removeProperty(selectedLink, 'link', key)} onAddProperty={() => editProperty(selectedLink, 'link')} />
+          : <OverviewInspector stats={stats} subjects={visibleSubjects} subjectFocus={subjectFocus} onSubject={(id) => setSubjectFocus(subjectFocus === id ? '' : id)} onEditSubject={(id) => setEditor({ kind: 'subject', item: subjectById(id) })} onRemoveSubject={(id) => setRemoving({ kind: 'subject', item: subjectById(id) })} coreObjects={objects.filter((item) => item.is_core && scope.inScope.has(item.id))} onLocate={locate} onEditObject={(id) => editObject(objectById.get(id))} onUncore={(id) => toggleCore(objectById.get(id))} onCreate={() => openCreateObject()} />}
     </aside>}
     {editor?.kind === 'object' && <ObjectTypeEditor activeId={activeId} editing={editor.item || null} initial={editor.initial} notify={notify} onClose={() => { pendingPosition.current = null; setEditor(null); }} onSaved={afterObjectSaved} />}
-    {editor?.kind === 'link' && <LinkTypeEditor activeId={activeId} objects={objects} editing={editor.item || null} initial={editor.initial} notify={notify} onClose={() => setEditor(null)} onSaved={afterLinkSaved} />}
-    {removing && <RemoveDialog activeId={activeId} target={removing} links={links} onClose={() => setRemoving(null)} onRemoved={afterRemoved} onEditObject={(item) => { setRemoving(null); editObject(item); }} navigate={navigate} />}
+    {editor?.kind === 'link' && <LinkTypeEditor activeId={activeId} objects={objects} editing={editor.item || null} initial={editor.initial} copyFrom={editor.copyFrom} notify={notify} onClose={() => setEditor(null)} onSaved={afterLinkSaved} />}
+    {editor?.kind === 'copy' && <ObjectCopyDialog activeId={activeId} source={editor.item} objects={objects} links={links} notify={notify} onClose={() => setEditor(null)} onCopied={afterCopied} />}
+    {editor?.kind === 'property' && <PropertyQuickEditor activeId={activeId} owner={editor.owner} ownerKind={editor.ownerKind} propertyKey={editor.propertyKey} notify={notify} onClose={() => setEditor(null)} onSaved={afterCardSaved} />}
+    {editor?.kind === 'subject' && editor.item && <SubjectDomainQuickEditor activeId={activeId} subject={editor.item} notify={notify} onClose={() => setEditor(null)} onSaved={afterCardSaved} />}
+    {removing?.kind === 'property' && <PropertyRemoveDialog activeId={activeId} owner={removing.owner} ownerKind={removing.ownerKind} propertyKey={removing.propertyKey} notify={notify} onClose={() => setRemoving(null)} onSaved={afterCardSaved} />}
+    {removing?.kind === 'subject' && removing.item && <SubjectDomainRemoveDialog subject={removing.item} objectCount={objects.filter((item) => item.subject_domain_id === removing.item.id).length} notify={notify} onClose={() => setRemoving(null)} onRemoved={async () => { if (subjectFocus === removing.item.id) setSubjectFocus(''); await afterCardSaved(); }} />}
+    {(removing?.kind === 'object' || removing?.kind === 'link') && removing.item && <RemoveDialog activeId={activeId} target={removing} links={links} onClose={() => setRemoving(null)} onRemoved={(message) => afterRemoved(message, removing.item.id)} onEditObject={(item) => { setRemoving(null); editObject(item); }} navigate={navigate} />}
   </div>;
 }
 
-function ObjectInspector({ object, color, relations, onEdit, onRemove, onToggleCore, onNeighbors, onAddLink, onSelectLink, onOpenList }) {
+// 检查器里的每张小卡片都带“编辑 / 删除”两个图标；卡片本身仍可点击（选中关系、定位对象、高亮主题域）。
+function CardActions({ label, onEdit, onRemove, editTitle = '编辑', removeTitle = '删除', removeIcon }) {
+  const stop = (fn) => (event) => { event.stopPropagation(); fn(); };
+  return <span className="card-actions">
+    {onEdit && <button type="button" className="card-action" onClick={stop(onEdit)} title={`${editTitle}${label ? `：${label}` : ''}`} aria-label={`${editTitle}${label ? `：${label}` : ''}`}><Pencil size={13} /></button>}
+    {onRemove && <button type="button" className="card-action danger" onClick={stop(onRemove)} title={`${removeTitle}${label ? `：${label}` : ''}`} aria-label={`${removeTitle}${label ? `：${label}` : ''}`}>{removeIcon || <Trash2 size={13} />}</button>}
+  </span>;
+}
+
+function SectionHeader({ title, count, onAdd, addLabel }) {
+  return <h4 className="inspector-section-head"><span>{title} · {count}</span>{onAdd && <button type="button" className="card-action" onClick={onAdd} title={addLabel} aria-label={addLabel}><Plus size={13} /></button>}</h4>;
+}
+
+function PropertyCards({ properties, onEdit, onRemove }) {
+  return <div className="inspector-props">{properties.map((prop) => <div key={prop.key} className="inspector-card" role="button" tabIndex={0} onDoubleClick={() => onEdit(prop.key)} onKeyDown={(e) => { if (e.key === 'Enter') onEdit(prop.key); }}>
+    <span className="inspector-card-body"><span>{prop.name}{prop.is_primary_key && <KeyRound size={11} aria-label="主键" />}{prop.is_required && <em className="mini-tag">必填</em>}</span><code>{prop.key} · {dataTypeLabel(prop.type)}</code></span>
+    <CardActions label={prop.name} onEdit={() => onEdit(prop.key)} onRemove={prop.is_primary_key ? null : () => onRemove(prop.key)} />
+  </div>)}</div>;
+}
+
+function ObjectInspector({ object, color, relations, onEdit, onCopy, onRemove, onToggleCore, onNeighbors, onAddLink, onSelectLink, onEditLink, onRemoveLink, onEditProperty, onRemoveProperty, onAddProperty, onOpenList }) {
   const properties = object.effective_properties || object.properties || [];
   return <div className="inspector-content">
     <div className="inspector-object"><div className="entity-icon large" style={{ color: color.text, background: color.fill, borderColor: color.border }}><ObjectTypeIcon value={object.icon} size={22} /></div><div><h2>{object.display_name}{object.is_core && <em className="core-badge"><Star size={10} /> 核心</em>}</h2><code>{object.name}</code></div></div>
-    <div className="inspector-actions"><button className="btn primary small" onClick={onEdit}><Pencil size={14} /> 编辑</button><button className="btn secondary small" onClick={onAddLink}><Link2 size={14} /> 新建关系</button><button className="btn danger small" onClick={onRemove}><Trash2 size={14} /> 删除</button></div>
+    <div className="inspector-actions"><button className="btn primary small" onClick={onEdit}><Pencil size={14} /> 编辑</button><button className="btn secondary small" onClick={onCopy} title="复制对象（⌘D）"><Copy size={14} /> 复制</button><button className="btn secondary small" onClick={onAddLink}><Link2 size={14} /> 新建关系</button><button className="btn danger small" onClick={onRemove}><Trash2 size={14} /> 删除</button></div>
     <div className="inspector-quick"><button type="button" onClick={onToggleCore} className={object.is_core ? 'on' : ''}><Star size={13} /> {object.is_core ? '已设为核心对象' : '设为核心对象'}</button><button type="button" onClick={onNeighbors}><Crosshair size={13} /> 只看关联对象</button></div>
     <p>{object.description || '暂无业务说明'}</p>
     <dl>
@@ -454,37 +505,53 @@ function ObjectInspector({ object, color, relations, onEdit, onRemove, onToggleC
       <div><dt>资源状态</dt><dd><em className={`oma-status ${object.status}`}>{statusLabel(object.status)}</em></dd></div>
       <div><dt>标题属性</dt><dd className="mono">{object.title_property || '未设置'}</dd></div>
     </dl>
-    <h4>关联关系 · {relations.length}</h4>
-    <div className="inspector-relations">{relations.map((link) => { const outgoing = link.source_object_type_id === object.id; return <button type="button" key={link.id} onClick={() => onSelectLink(link.id)}><span className={outgoing ? 'out' : 'in'}>{outgoing ? '出' : '入'}</span><b>{link.display_name}</b><small>{outgoing ? `→ ${link.target_display_name}` : `← ${link.source_display_name}`}</small></button>; })}{!relations.length && <p className="inspector-note">还没有关系，可点“新建关系”或使用连线模式。</p>}</div>
-    <h4>对象属性 · {properties.length}</h4>
-    <div className="inspector-props">{properties.map((prop) => <div key={prop.key}><span>{prop.name}{prop.is_primary_key && <KeyRound size={11} />}</span><code>{prop.key} · {dataTypeLabel(prop.type)}</code></div>)}</div>
+    <SectionHeader title="关联关系" count={relations.length} onAdd={onAddLink} addLabel="新建关系" />
+    <div className="inspector-relations">{relations.map((link) => { const outgoing = link.source_object_type_id === object.id; return <div key={link.id} className="inspector-card" role="button" tabIndex={0} onClick={() => onSelectLink(link.id)} onKeyDown={(e) => { if (e.key === 'Enter') onSelectLink(link.id); }}>
+      <span className={`direction ${outgoing ? 'out' : 'in'}`}>{outgoing ? '出' : '入'}</span>
+      <span className="inspector-card-body"><b>{link.display_name}</b><small>{outgoing ? `→ ${link.target_display_name}` : `← ${link.source_display_name}`}</small></span>
+      <CardActions label={link.display_name} onEdit={() => onEditLink(link.id)} onRemove={() => onRemoveLink(link.id)} />
+    </div>; })}{!relations.length && <p className="inspector-note">还没有关系，可点 + 或使用连线模式。</p>}</div>
+    <SectionHeader title="对象属性" count={properties.length} onAdd={onAddProperty} addLabel="添加属性" />
+    <PropertyCards properties={properties} onEdit={onEditProperty} onRemove={onRemoveProperty} />
     <button type="button" className="text-btn inspector-more" onClick={onOpenList}>在对象类型目录中查看 <ArrowRight size={13} /></button>
   </div>;
 }
 
-function LinkInspector({ link, onEdit, onRemove, onLocate }) {
+function LinkInspector({ link, onEdit, onCopy, onRemove, onLocate, onEditObject, onEditProperty, onRemoveProperty, onAddProperty }) {
+  const endpoint = (id, name, label) => <div className="inspector-card endpoint" role="button" tabIndex={0} onClick={() => onLocate(id)} onKeyDown={(e) => { if (e.key === 'Enter') onLocate(id); }} title={`定位${label}`}>
+    <span className="inspector-card-body"><small>{label}</small><b>{name}</b></span>
+    <CardActions label={name} onEdit={() => onEditObject(id)} editTitle="编辑对象" />
+  </div>;
   return <div className="inspector-content">
     <div className="inspector-object"><div className="entity-icon large"><GitBranch size={20} /></div><div><h2>{link.display_name}{link.is_core && <em className="core-badge">核心</em>}</h2><code>{link.name}</code></div></div>
-    <div className="inspector-actions"><button className="btn primary small" onClick={onEdit}><Pencil size={14} /> 编辑</button><button className="btn danger small" onClick={onRemove}><Trash2 size={14} /> 删除</button></div>
-    <div className="inspector-endpoints"><button type="button" onClick={() => onLocate(link.source_object_type_id)}>{link.source_display_name}</button><span><ArrowRight size={14} /><small>{LINK_CARDINALITIES[link.cardinality] || link.cardinality}</small></span><button type="button" onClick={() => onLocate(link.target_object_type_id)}>{link.target_display_name}</button></div>
+    <div className="inspector-actions"><button className="btn primary small" onClick={onEdit}><Pencil size={14} /> 编辑</button><button className="btn secondary small" onClick={onCopy} title="复制关系（⌘D）"><Copy size={14} /> 复制</button><button className="btn danger small" onClick={onRemove}><Trash2 size={14} /> 删除</button></div>
+    <div className="inspector-endpoints">{endpoint(link.source_object_type_id, link.source_display_name, '起点')}<span><ArrowRight size={14} /><small>{LINK_CARDINALITIES[link.cardinality] || link.cardinality}</small></span>{endpoint(link.target_object_type_id, link.target_display_name, '终点')}</div>
     <p>{link.description || '暂无业务定义'}</p>
     <dl>
       <div><dt>反向名称</dt><dd>{link.reverse_display_name || '—'}</dd></div>
       <div><dt>来源系统</dt><dd>{link.source_system || '—'}</dd></div>
       <div><dt>起点键 / 终点键</dt><dd className="mono">{link.source_key || '—'} / {link.target_key || '—'}</dd></div>
-      <div><dt>关系属性</dt><dd>{(link.properties || []).map((item) => item.name).join('、') || '无'}</dd></div>
       <div><dt>资源状态</dt><dd><em className={`oma-status ${link.status}`}>{statusLabel(link.status)}</em></dd></div>
     </dl>
+    <SectionHeader title="关系属性" count={(link.properties || []).length} onAdd={onAddProperty} addLabel="添加关系属性" />
+    <PropertyCards properties={link.properties || []} onEdit={onEditProperty} onRemove={onRemoveProperty} />
+    {!(link.properties || []).length && <p className="inspector-note">关系属性用于描述关系本身，例如“签约日期”。可点 + 添加。</p>}
   </div>;
 }
 
-function OverviewInspector({ stats, subjects, subjectFocus, onSubject, coreObjects, onLocate, onCreate }) {
+function OverviewInspector({ stats, subjects, subjectFocus, onSubject, onEditSubject, onRemoveSubject, coreObjects, onLocate, onEditObject, onUncore, onCreate }) {
   return <div className="inspector-content">
     <div className="inspector-overview">{[['对象', stats.nodes], ['核心对象', stats.core], ['关系', stats.internal], ['跨域关联', stats.cross]].map(([label, value]) => <span key={label}><b>{value}</b><small>{label}</small></span>)}</div>
     <h4>主题域配色</h4>
-    <div className="inspector-subjects">{subjects.map((item) => <button type="button" key={item.id} className={subjectFocus === item.id ? 'active' : ''} onClick={() => onSubject(item.id)}><i style={{ background: item.color.border }} /><span>{item.name}<small>{item.domain}</small></span><em>{item.count}</em></button>)}{!subjects.length && <p className="inspector-note">当前范围没有对象。</p>}</div>
+    <div className="inspector-subjects">{subjects.map((item) => <div key={item.id} className={`inspector-card ${subjectFocus === item.id ? 'active' : ''}`} role="button" tabIndex={0} aria-pressed={subjectFocus === item.id} onClick={() => onSubject(item.id)} onKeyDown={(e) => { if (e.key === 'Enter') onSubject(item.id); }}>
+      <i style={{ background: item.color.border }} /><span className="inspector-card-body">{item.name}<small>{item.domain}</small></span><em>{item.count}</em>
+      {item.id !== UNCLASSIFIED && <CardActions label={item.name} onEdit={() => onEditSubject(item.id)} onRemove={() => onRemoveSubject(item.id)} />}
+    </div>)}{!subjects.length && <p className="inspector-note">当前范围没有对象。</p>}</div>
     <h4>核心对象 · {coreObjects.length}</h4>
-    <div className="inspector-relations">{coreObjects.map((item) => <button type="button" key={item.id} onClick={() => onLocate(item.id)}><span className="core"><Star size={10} /></span><b>{item.display_name}</b><small>{item.subject_domain_name || '未分类'}</small></button>)}{!coreObjects.length && <p className="inspector-note">还没有核心对象。右键对象选择“设为核心对象”，或在对象编辑中勾选。</p>}</div>
+    <div className="inspector-relations">{coreObjects.map((item) => <div key={item.id} className="inspector-card" role="button" tabIndex={0} onClick={() => onLocate(item.id)} onKeyDown={(e) => { if (e.key === 'Enter') onLocate(item.id); }}>
+      <span className="direction core"><Star size={10} /></span><span className="inspector-card-body"><b>{item.display_name}</b><small>{item.subject_domain_name || '未分类'}</small></span>
+      <CardActions label={item.display_name} onEdit={() => onEditObject(item.id)} onRemove={() => onUncore(item.id)} removeTitle="取消核心标记" removeIcon={<X size={13} />} />
+    </div>)}{!coreObjects.length && <p className="inspector-note">还没有核心对象。右键对象选择“设为核心对象”，或在对象编辑中勾选。</p>}</div>
     <button type="button" className="btn secondary small inspector-create" onClick={onCreate}><Plus size={14} /> 新建对象类型</button>
   </div>;
 }

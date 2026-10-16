@@ -8,7 +8,7 @@ const TYPES = [
 
 // 与《本体建模模板.xlsx》的“属性类别”列保持一致。它是属性语义维度，
 // 不替代对象的对象类别、资源状态或本体发布状态。
-const PROPERTY_CATEGORIES = ['标识属性', '业务属性', '状态属性', '实时属性', '计算属性'];
+export const PROPERTY_CATEGORIES = ['标识属性', '业务属性', '状态属性', '实时属性', '计算属性'];
 
 export const emptyProperty = () => ({
   key: '', name: '', type: 'string', property_category: '业务属性',
