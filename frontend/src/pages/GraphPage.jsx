@@ -55,6 +55,8 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [focusTarget, setFocusTarget] = useState('');
+  const [graphIcons, setGraphIcons] = useState([]);
+  const graphIconSignature = useRef('');
 
   const load = async () => {
     const [objects, links, subjects, domains] = await Promise.all([
@@ -94,6 +96,8 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   }), [links, scope, subjectFocus, showLabels, objectById]);
   const visualsRef = useRef({ nodeItems, edgeItems });
   visualsRef.current = { nodeItems, edgeItems };
+  const graphNodeItemsRef = useRef(nodeItems);
+  graphNodeItemsRef.current = nodeItems;
 
   const savePositions = () => { if (networkRef.current) writeLayout(activeId, networkRef.current.getPositions()); };
 
@@ -121,10 +125,27 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     network.on('zoom', () => setMenu(null));
     network.on('dragEnd', (params) => { if (params.nodes.length) savePositions(); });
     network.on('stabilizationIterationsDone', () => { network.setOptions({ physics: { enabled: false } }); savePositions(); network.fit({ animation: { duration: 260 } }); });
+    network.on('afterDrawing', () => {
+      const items = graphNodeItemsRef.current;
+      const positions = network.getPositions(items.map((item) => item.id));
+      const scale = network.getScale();
+      const next = items.flatMap((item) => {
+        if (item.hidden) return [];
+        const position = positions[item.id];
+        if (!position) return [];
+        const point = network.canvasToDOM({ x: position.x, y: position.y - item.iconLineHeight * 1.5 });
+        return [{ id: item.id, icon: item.icon, x: point.x, y: point.y, size: Math.max(9, item.iconSize * scale), color: item.iconColor, opacity: item.iconOpacity }];
+      });
+      const signature = next.map((item) => `${item.id}:${item.icon}:${item.x.toFixed(1)}:${item.y.toFixed(1)}:${item.size.toFixed(1)}:${item.color}:${item.opacity}`).join('|');
+      if (signature !== graphIconSignature.current) {
+        graphIconSignature.current = signature;
+        setGraphIcons(next);
+      }
+    });
     if (placed) requestAnimationFrame(() => network.fit());
     const observer = new ResizeObserver(() => network.redraw()); observer.observe(holder.current);
     setNetworkReady(true);
-    return () => { observer.disconnect(); network.destroy(); networkRef.current = null; nodesRef.current = null; edgesRef.current = null; setNetworkReady(false); };
+    return () => { observer.disconnect(); network.destroy(); networkRef.current = null; nodesRef.current = null; edgesRef.current = null; graphIconSignature.current = ''; setGraphIcons([]); setNetworkReady(false); };
   }, [activeId, data?.ontologyId]);
 
   useEffect(() => {
@@ -289,10 +310,29 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     const network = networkRef.current; if (!network) return;
     network.moveTo({ scale: Math.min(3, Math.max(0.15, network.getScale() * factor)), animation: { duration: 180 } });
   };
-  const exportImage = () => {
+  const exportImage = async () => {
     const canvas = holder.current?.querySelector('canvas'); if (!canvas) return;
     const output = document.createElement('canvas'); output.width = canvas.width; output.height = canvas.height;
     const ctx = output.getContext('2d'); ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, output.width, output.height); ctx.drawImage(canvas, 0, 0);
+    const canvasRect = canvas.getBoundingClientRect();
+    const ratioX = output.width / canvasRect.width; const ratioY = output.height / canvasRect.height;
+    const icons = [...(wrapRef.current?.querySelectorAll('.network-node-icon svg') || [])];
+    const images = await Promise.all(icons.map((svg) => new Promise((resolve) => {
+      const clone = svg.cloneNode(true); const color = getComputedStyle(svg).color;
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('width', String(svg.getBoundingClientRect().width));
+      clone.setAttribute('height', String(svg.getBoundingClientRect().height));
+      const source = new XMLSerializer().serializeToString(clone).replaceAll('currentColor', color);
+      const image = new Image(); const rect = svg.getBoundingClientRect();
+      image.onload = () => resolve({ image, rect, opacity: Number(getComputedStyle(svg.parentElement).opacity) || 1 });
+      image.onerror = () => resolve(null);
+      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(source)}`;
+    })));
+    images.filter(Boolean).forEach(({ image, rect, opacity }) => {
+      ctx.globalAlpha = opacity;
+      ctx.drawImage(image, (rect.left - canvasRect.left) * ratioX, (rect.top - canvasRect.top) * ratioY, rect.width * ratioX, rect.height * ratioY);
+    });
+    ctx.globalAlpha = 1;
     const anchor = document.createElement('a'); anchor.href = output.toDataURL('image/png'); anchor.download = `${active?.name || '本体'}-本体图谱.png`; anchor.click();
   };
 
@@ -428,6 +468,7 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
       </div>
       <div className="network-canvas-wrap" ref={wrapRef}>
         <div ref={holder} className={`network-canvas ${connecting ? 'connecting' : ''}`} />
+        <div className="network-node-icons" aria-hidden="true">{graphIcons.map((item) => <span key={item.id} className="network-node-icon" style={{ left: item.x, top: item.y, width: item.size, height: item.size, color: item.color, opacity: item.opacity }}><ObjectTypeIcon value={item.icon} size={Math.max(1, item.size)} /></span>)}</div>
         {(neighborsObject || connecting) && <div className="graph-banner">{connecting ? <><Link2 size={14} /><span>连线模式：按住起点对象拖到终点对象，松开后填写关系信息。</span><button type="button" onClick={() => setConnecting(false)}>退出（Esc）</button></> : <><Crosshair size={14} /><span>正在查看“{neighborsObject.display_name}”及其直接关联的 {Math.max(0, scope.inScope.size - 1)} 个对象</span><button type="button" onClick={() => setNeighborsOf('')}>返回全图</button></>}</div>}
         {!objects.length && <div className="graph-empty"><NetworkIcon size={34} /><strong>还没有对象类型</strong><span>新建第一个对象后，本体图谱会在这里生成。也可以双击画布空白处直接新建。</span><button className="btn primary small" onClick={() => openCreateObject()}><Plus size={14} /> 新建对象类型</button></div>}
         {objects.length > 0 && !scope.inScope.size && <div className="graph-empty soft"><Boxes size={30} /><strong>当前过滤条件下没有对象</strong><button className="btn secondary small" onClick={() => { setDomainIds(new Set()); setCoreOnly(false); setNeighborsOf(''); }}>清除过滤</button></div>}

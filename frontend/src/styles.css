@@ -536,6 +536,9 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .network-canvas-wrap { position: relative; min-height: 0; flex: 1 1 0; height: 0; overflow: hidden; }
 .network-canvas { position: absolute; inset: 0; width: 100%; height: 100%; min-height: 0; }
 .network-canvas > .vis-network { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; }
+.network-node-icons { position: absolute; z-index: 2; inset: 0; overflow: hidden; pointer-events: none; }
+.network-node-icon { position: absolute; display: grid; place-items: center; transform: translate(-50%, -50%); }
+.network-node-icon svg { display: block; }
 .graph-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #8193a4; background: rgba(249,251,253,.92); }.graph-empty strong { margin-top: 10px; color: #526a80; font-size: 13px; }.graph-empty span { margin-top: 5px; font-size: 10px; }
 
 @media (max-width: 1350px) {

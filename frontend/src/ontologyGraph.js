@@ -91,10 +91,16 @@ export function nodeVisual(object, { color = NEUTRAL_COLOR, emphasis = 'normal',
   const text = withAlpha(color.text, alpha);
   return {
     id: object.id,
+    icon: object.icon || 'box',
+    iconColor: color.text,
+    iconOpacity: alpha,
+    iconSize: core ? 17 : 14,
+    iconLineHeight: core ? 18 : 14.4,
     hidden,
     // 隐藏对象退出布局计算，“重新布局”只排当前可见范围。
     physics: !hidden,
-    label: `<b>${title}</b>\n${escapeLabel(object.name)}`,
+    // 第一行留给对象配置图标，图标由 GraphPage 在同一画布中绘制。
+    label: `\u00a0\n\u00a0\n<b>${title}</b>\n${escapeLabel(object.name)}`,
     title: `${object.display_name}${core ? '（核心对象）' : ''} · ${object.properties?.length || 0} 个属性 · ${object.business_domain_name || '未分类'} / ${object.subject_domain_name || '未分类'}`,
     shape: 'box',
     margin: core ? { top: 16, right: 22, bottom: 16, left: 22 } : { top: 11, right: 16, bottom: 11, left: 16 },
