@@ -42,6 +42,7 @@ V4 字典与变更记录适配：
 - “本体质检”独立生成并保存当前语义层报告，检查对象、关系、接口、规则以及已配置映射/逻辑的引用；报告标识模型变更后的过期状态，不将实例或生产接口运行情况冒充为已验证。
 - “本体版本对比”基于发布时的不可变快照对比语义字段，左右查看新增、修改和删除；历史版本不被编辑。两页的对话只解释已生成的报告/差异。默认使用本地规则解读，只有明确设置 `ONTOLOGY_GOVERNANCE_AI_ENABLED=1` 且配置模型密钥才会将相应证据发送到模型服务。
 - 发布记录可打开只读历史语义快照；映射图谱可切换当前工作状态与历史发布版。正式快照不包含实例数据或连接密码；删除的模型资源在旧版仍保留。
+- 三期重点业务逻辑、菜单和验收口径见 [三期本体治理迭代PRD.html](docs/三期本体治理迭代PRD.html)。
 - V4 `dic_xform_rule` 已可管理，但原型的“转换规则”目前承载自由文本逻辑；在 `dxr_code` 的资源字段契约明确前，不把该字段强改为字典下拉。模板关系映射使用“关联映射”，而 V4 `dic_mapping_way` 尚无对应 code，因此暂保留现有值。
 
 v1.10 在不改动模板事实字段和内置案例的前提下完成 P0/P1 前端适配：
@@ -220,17 +221,21 @@ npm run build
 
 自动化使用临时数据库，不修改 `data/ontology_manual.db`。
 
-## 9. 项目结构
+## 9. 目录
 
 ```text
-ontology-platform/
-├── backend/          # FastAPI、SQLite、本体模型与运行服务
-├── frontend/src/     # React 原型页面
-├── frontend/tests/   # 前端单元测试
-├── tests/            # 后端 API 与业务校验测试
-├── requirements.txt  # Python 依赖
-├── start.sh          # 启动服务
-└── README.md
+ontology-studio-manual/
+├── backend/                   # FastAPI、SQLite、本体模型与运行服务
+├── frontend/src/              # React 原型页面
+├── frontend/public/docs/      # HTML 教材和一期 PRD
+├── data/ontology_manual.db    # 演示数据库
+├── docs/本体建模模板.xlsx      # 15 Sheet 原始建模契约
+├── docs/v1.9产品决策与数据保护.md
+├── docs/一期二期实施计划.md
+├── docs/测试用例.md
+├── tests/test_api.py
+├── requirements.txt
+└── start.sh
 ```
 
 ## 10. 生产研发重点
@@ -242,6 +247,18 @@ ontology-platform/
 - Action 网关必须具备参数校验、授权、审批/确认、幂等、超时、重试、补偿和审计。
 - AI Proposal 必须保存证据定位、置信度、变更理由、与基线的差异和风险等级，并持续评测接受率和正确率。
 
-## 发布与回滚
+## 11. 相关文档
 
-GitHub 仓库 [YJ-yuejun/ontology-platform](https://github.com/YJ-yuejun/ontology-platform) 是本体原型的正式发布与备份位置。后续发布将提交项目源码、运行所需配置和 README，并推送到 `main`；稳定版本使用 `v` 前缀标签保存，便于按标签恢复。需求文档、设计稿和演示数据库不纳入发布仓库。
+- [v1.9 产品决策与数据保护](docs/v1.9产品决策与数据保护.md)
+- [一期二期实施计划](docs/一期二期实施计划.md)
+- [完整测试用例](docs/测试用例.md)
+- [本体原型建模问题 QA](docs/本体原型建模问题QA.md)
+- [P0/P1 模板适配记录](docs/P0-P1模板适配记录.md)
+- [本体与 Palantir Foundry 扫盲指南](docs/本体与Palantir-Foundry扫盲指南.md)
+- [Palantir 式建模概念映射](docs/Palantir式建模映射.md)
+- [原始 15 Sheet 本体建模模板](docs/本体建模模板.xlsx)
+- [HTML 扫盲教材](frontend/public/docs/ontology-foundry-primer.html)
+- [一期 HTML PRD](frontend/public/docs/ontology-phase1-prd.html)
+- [二期规则与数据源映射 HTML PRD](frontend/public/docs/ontology-phase2-rules-mapping-prd.html)
+
+`docs/v1.8会议决策与数据模型.md` 仅保留为历史评审记录，已被 v1.9 口径替代。

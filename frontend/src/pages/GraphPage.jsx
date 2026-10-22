@@ -3,7 +3,7 @@ import { DataSet } from 'vis-data';
 import { Network } from 'vis-network';
 import 'vis-network/styles/vis-network.css';
 import {
-  ArrowRight, Boxes, Check, Copy, Crosshair, Focus, GitBranch, Image as ImageIcon, KeyRound, Link2, Maximize2, Minimize2,
+  ArrowRight, Boxes, Check, ChevronDown, Copy, Crosshair, Focus, GitBranch, Image as ImageIcon, KeyRound, Link2, Maximize2, Minimize2,
   Network as NetworkIcon, PanelRightClose, PanelRightOpen, Pencil, Plus, RefreshCw, Search, Star, Trash2, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -19,6 +19,7 @@ import Modal from '../components/Modal';
 import { dataTypeLabel, statusLabel } from '../labels';
 import { ErrorState, Loading } from '../components/StateViews';
 import { domainKey, edgeVisual, graphScope, NEUTRAL_COLOR, nodeVisual, subjectColorMap, subjectKey, UNCLASSIFIED } from '../ontologyGraph';
+import { useAssistant } from '../assistant/AssistantContext';
 
 const layoutKey = (activeId) => `ontology-graph-layout:${activeId}`;
 const readLayout = (activeId) => { try { return JSON.parse(localStorage.getItem(layoutKey(activeId)) || '{}'); } catch { return {}; } };
@@ -26,8 +27,24 @@ const writeLayout = (activeId, positions) => { try { localStorage.setItem(layout
 const PHYSICS = { enabled: true, stabilization: { iterations: 220, fit: true }, barnesHut: { gravitationalConstant: -4200, springLength: 190, springConstant: 0.035, avoidOverlap: 0.45 } };
 const isTyping = (target) => ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName) || target?.isContentEditable;
 
+function useChipOverflow(ref, items) {
+  const [overflow, setOverflow] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return undefined;
+    const check = () => setOverflow(element.scrollHeight > element.clientHeight + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    window.addEventListener('resize', check);
+    return () => { observer.disconnect(); window.removeEventListener('resize', check); };
+  }, [ref, items]);
+  return overflow;
+}
+
 export default function GraphPage({ activeId, active, refreshOntologies, notify }) {
   const navigate = useNavigate();
+  const assistant = useAssistant();
   const [searchParams] = useSearchParams();
   const holder = useRef(null);
   const wrapRef = useRef(null);
@@ -44,6 +61,10 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const [coreOnly, setCoreOnly] = useState(false);
   const [showCross, setShowCross] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+  const [domainExpanded, setDomainExpanded] = useState(false);
+  const [subjectExpanded, setSubjectExpanded] = useState(false);
+  const domainChipsRef = useRef(null);
+  const subjectChipsRef = useRef(null);
   const [neighborsOf, setNeighborsOf] = useState('');
   const [selection, setSelection] = useState(null); // { kind: 'node' | 'edge', id }
   const [editor, setEditor] = useState(null); // { kind: 'object' | 'link' | 'copy' | 'property' | 'subject', ... }
@@ -52,6 +73,7 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const [connecting, setConnecting] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [zoomLevel, setZoomLevel] = useState(100);
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [focusTarget, setFocusTarget] = useState('');
@@ -122,19 +144,27 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     network.on('doubleClick', call('onDoubleClick'));
     network.on('oncontext', call('onContext'));
     network.on('dragStart', () => setMenu(null));
-    network.on('zoom', () => setMenu(null));
+    network.on('zoom', () => { setMenu(null); setZoomLevel(Math.round(network.getScale() * 100)); });
     network.on('dragEnd', (params) => { if (params.nodes.length) savePositions(); });
-    network.on('stabilizationIterationsDone', () => { network.setOptions({ physics: { enabled: false } }); savePositions(); network.fit({ animation: { duration: 260 } }); });
+    network.on('stabilizationIterationsDone', () => {
+      network.setOptions({ physics: { enabled: false } }); savePositions();
+      network.fit({ animation: { duration: 260 } });
+      setTimeout(() => setZoomLevel(Math.round(network.getScale() * 100)), 320);
+    });
     network.on('afterDrawing', () => {
       const items = graphNodeItemsRef.current;
-      const positions = network.getPositions(items.map((item) => item.id));
       const scale = network.getScale();
       const next = items.flatMap((item) => {
         if (item.hidden) return [];
-        const position = positions[item.id];
-        if (!position) return [];
-        const point = network.canvasToDOM({ x: position.x, y: position.y - item.iconLineHeight * 1.5 });
-        return [{ id: item.id, icon: item.icon, x: point.x, y: point.y, size: Math.max(9, item.iconSize * scale), color: item.iconColor, opacity: item.iconOpacity }];
+        const box = network.getBoundingBox(item.id);
+        if (!box) return [];
+        const topLeft = network.canvasToDOM({ x: box.left, y: box.top });
+        const bottomRight = network.canvasToDOM({ x: box.right, y: box.bottom });
+        const size = Math.max(9, item.iconSize * scale);
+        // 图标贴在节点左侧内边距中，和标题第一行同一视觉行，不再额外占用高度。
+        const x = topLeft.x + (item.iconSize > 14 ? 10 : 8) + size / 2;
+        const y = (topLeft.y + bottomRight.y) / 2;
+        return [{ id: item.id, icon: item.icon, x, y, size, color: item.iconColor, opacity: item.iconOpacity }];
       });
       const signature = next.map((item) => `${item.id}:${item.icon}:${item.x.toFixed(1)}:${item.y.toFixed(1)}:${item.size.toFixed(1)}:${item.color}:${item.opacity}`).join('|');
       if (signature !== graphIconSignature.current) {
@@ -142,7 +172,10 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
         setGraphIcons(next);
       }
     });
-    if (placed) requestAnimationFrame(() => network.fit());
+    if (placed) {
+      requestAnimationFrame(() => network.fit());
+      setTimeout(() => setZoomLevel(Math.round(network.getScale() * 100)), 320);
+    }
     const observer = new ResizeObserver(() => network.redraw()); observer.observe(holder.current);
     setNetworkReady(true);
     return () => { observer.disconnect(); network.destroy(); networkRef.current = null; nodesRef.current = null; edgesRef.current = null; graphIconSignature.current = ''; setGraphIcons([]); setNetworkReady(false); };
@@ -230,6 +263,14 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     if (counts.has(UNCLASSIFIED)) rows.push({ id: UNCLASSIFIED, name: '未分类', count: counts.get(UNCLASSIFIED) });
     return rows;
   }, [objects, data]);
+  const domainChipOverflow = useChipOverflow(domainChipsRef, domainChips);
+  const subjectChipOverflow = useChipOverflow(subjectChipsRef, visibleSubjects);
+  useEffect(() => { setDomainExpanded(false); setSubjectExpanded(false); }, [activeId]);
+  useEffect(() => {
+    if (!networkRef.current) return;
+    const timer = window.setTimeout(() => networkRef.current?.fit({ animation: { duration: 260 } }), 120);
+    return () => window.clearTimeout(timer);
+  }, [domainExpanded, subjectExpanded]);
   const toggleDomain = (id) => setDomainIds((old) => { const next = new Set(old); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
   const stats = useMemo(() => {
@@ -305,10 +346,17 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     const network = networkRef.current; if (!network) return;
     network.setOptions({ physics: { ...PHYSICS, stabilization: { iterations: 200, fit: true } } });
     network.stabilize(200);
+    setTimeout(() => setZoomLevel(Math.round(network.getScale() * 100)), 900);
   };
   const zoom = (factor) => {
     const network = networkRef.current; if (!network) return;
-    network.moveTo({ scale: Math.min(3, Math.max(0.15, network.getScale() * factor)), animation: { duration: 180 } });
+    const scale = Math.min(3, Math.max(0.15, network.getScale() * factor));
+    network.moveTo({ scale, animation: { duration: 180 } });
+    setZoomLevel(Math.round(scale * 100));
+  };
+  const fitGraph = () => {
+    networkRef.current?.fit({ animation: { duration: 260 } });
+    setTimeout(() => { const network = networkRef.current; if (network) setZoomLevel(Math.round(network.getScale() * 100)); }, 300);
   };
   const exportImage = async () => {
     const canvas = holder.current?.querySelector('canvas'); if (!canvas) return;
@@ -365,6 +413,23 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
     onClick: ({ nodes, edges }) => {
       setMenu(null);
       if (connecting) return;
+      if (assistant.picking) {
+        const network = networkRef.current;
+        if (nodes.length) {
+          const object = objectById.get(nodes[0]);
+          if (object) {
+            const next = assistant.pick({ type: 'object_type', id: object.id, label: object.display_name, parent: object.subject_domain_name || '', detail: { name: object.name, core: !!object.is_core } });
+            network?.selectNodes((next || []).filter((entry) => entry.type === 'object_type').map((entry) => entry.id));
+          }
+        } else if (edges.length) {
+          const link = linkById.get(edges[0]);
+          if (link) {
+            const next = assistant.pick({ type: 'link_type', id: link.id, label: link.display_name, parent: '', detail: { name: link.name } });
+            network?.selectEdges((next || []).filter((entry) => entry.type === 'link_type').map((entry) => entry.id));
+          }
+        }
+        return;
+      }
       if (nodes.length) setSelection({ kind: 'node', id: nodes[0] });
       else if (edges.length) setSelection({ kind: 'edge', id: edges[0] });
       else setSelection(null);
@@ -438,23 +503,15 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
           <button className="btn primary small" onClick={() => openCreateObject()}><Plus size={14} /> 新建对象</button>
           <button className={`btn small ${connecting ? 'primary' : 'secondary'}`} disabled={objects.length < 1} onClick={() => setConnecting((value) => !value)} title="从一个对象拖到另一个对象即可新建关系（快捷键 L）"><Link2 size={14} /> {connecting ? '连线中…' : '连线建关系'}</button>
         </div>
-        <div className="graph-tool-group icon-only">
-          <button className="icon-btn" onClick={() => zoom(1.25)} title="放大" aria-label="放大"><ZoomIn size={16} /></button>
-          <button className="icon-btn" onClick={() => zoom(0.8)} title="缩小" aria-label="缩小"><ZoomOut size={16} /></button>
-          <button className="icon-btn" onClick={() => networkRef.current?.fit({ animation: { duration: 260 } })} title="适配全图（F）" aria-label="适配全图"><Focus size={16} /></button>
-          <button className="icon-btn" onClick={relayout} title="重新布局" aria-label="重新布局"><RefreshCw size={15} /></button>
-          <button className="icon-btn" onClick={exportImage} title="导出为图片" aria-label="导出为图片"><ImageIcon size={16} /></button>
-          <button className="icon-btn" onClick={() => setInspectorOpen((value) => !value)} title={inspectorOpen ? '收起检查器' : '展开检查器'} aria-label={inspectorOpen ? '收起检查器' : '展开检查器'}>{inspectorOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}</button>
-          <button className="icon-btn" onClick={toggleFullscreen} title={fullscreen ? '退出全屏（Esc）' : '全屏查看'} aria-label={fullscreen ? '退出全屏' : '全屏查看'}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
-        </div>
         <div className="graph-legend"><span><i className="legend-node" /> 对象 {stats.nodes}/{objects.length}</span><span><Star size={11} className="core-star" /> 核心 {stats.core}</span><span><i className="legend-edge" /> 关系 {stats.internal}</span>{showCross && stats.cross > 0 && <span><i className="legend-cross-edge" /> 跨域 {stats.cross}</span>}</div>
       </div>
       <div className="graph-filterbar">
         <span className="graph-filter-label">业务域</span>
-        <div className="graph-chips">
+        <div ref={domainChipsRef} className={`graph-chips collapsible ${domainExpanded ? 'expanded' : ''}`}>
           <button type="button" className={`graph-chip ${domainIds.size ? '' : 'active'}`} onClick={() => setDomainIds(new Set())}>全部</button>
           {domainChips.map((item) => <button type="button" key={item.id} aria-pressed={domainIds.has(item.id)} className={`graph-chip ${domainIds.has(item.id) ? 'active' : ''}`} onClick={() => toggleDomain(item.id)} disabled={!item.count}>{item.name}<small>{item.count}</small>{domainIds.has(item.id) && <Check size={12} />}</button>)}
         </div>
+        {(domainChipOverflow || domainExpanded) && <button type="button" className={`graph-chips-toggle ${domainExpanded ? 'open' : ''}`} aria-expanded={domainExpanded} onClick={() => setDomainExpanded((value) => !value)}>{domainExpanded ? '收起' : '展开'}<ChevronDown size={13} /></button>}
         <div className="graph-switches">
           <label><input type="checkbox" checked={coreOnly} onChange={(e) => setCoreOnly(e.target.checked)} /> 仅核心对象</label>
           <label title="范围外但与当前对象有关系的对象以虚线淡显"><input type="checkbox" checked={showCross} onChange={(e) => setShowCross(e.target.checked)} /> 显示跨域关联</label>
@@ -463,12 +520,25 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
       </div>
       <div className="graph-filterbar subject">
         <span className="graph-filter-label">主题域</span>
-        <div className="graph-chips">{visibleSubjects.map((item) => <button type="button" key={item.id} aria-pressed={subjectFocus === item.id} className={`graph-chip subject ${subjectFocus === item.id ? 'active' : ''} ${subjectFocus && subjectFocus !== item.id ? 'muted' : ''}`} style={{ '--chip-color': item.color.border, '--chip-fill': item.color.fill, '--chip-text': item.color.text }} title={item.domain ? `${item.domain} / ${item.name}` : item.name} onClick={() => setSubjectFocus(subjectFocus === item.id ? '' : item.id)}><i />{item.name}<small>{item.count}</small>{subjectFocus === item.id && <Check size={12} />}</button>)}{!visibleSubjects.length && <span className="graph-filter-empty">当前范围没有对象</span>}</div>
+        <div ref={subjectChipsRef} className={`graph-chips collapsible ${subjectExpanded ? 'expanded' : ''}`}>{visibleSubjects.map((item) => <button type="button" key={item.id} aria-pressed={subjectFocus === item.id} className={`graph-chip subject ${subjectFocus === item.id ? 'active' : ''} ${subjectFocus && subjectFocus !== item.id ? 'muted' : ''}`} style={{ '--chip-color': item.color.border, '--chip-fill': item.color.fill, '--chip-text': item.color.text }} title={item.domain ? `${item.domain} / ${item.name}` : item.name} onClick={() => setSubjectFocus(subjectFocus === item.id ? '' : item.id)}><i />{item.name}<small>{item.count}</small>{subjectFocus === item.id && <Check size={12} />}</button>)}{!visibleSubjects.length && <span className="graph-filter-empty">当前范围没有对象</span>}</div>
+        {(subjectChipOverflow || subjectExpanded) && <button type="button" className={`graph-chips-toggle ${subjectExpanded ? 'open' : ''}`} aria-expanded={subjectExpanded} onClick={() => setSubjectExpanded((value) => !value)}>{subjectExpanded ? '收起' : '展开'}<ChevronDown size={13} /></button>}
         <span className="graph-filter-hint">{subjectFocus ? '再次点击取消高亮' : '点击主题域高亮其对象'}</span>
       </div>
       <div className="network-canvas-wrap" ref={wrapRef}>
         <div ref={holder} className={`network-canvas ${connecting ? 'connecting' : ''}`} />
         <div className="network-node-icons" aria-hidden="true">{graphIcons.map((item) => <span key={item.id} className="network-node-icon" style={{ left: item.x, top: item.y, width: item.size, height: item.size, color: item.color, opacity: item.opacity }}><ObjectTypeIcon value={item.icon} size={Math.max(1, item.size)} /></span>)}</div>
+        <div className="graph-floating-controls" role="toolbar" aria-label="图谱视图控制">
+          <button type="button" className="graph-float-btn" onClick={() => zoom(0.8)} title="缩小" aria-label="缩小"><ZoomOut size={16} /></button>
+          <span className="graph-zoom-level" title="当前缩放比例">{zoomLevel}%</span>
+          <button type="button" className="graph-float-btn" onClick={() => zoom(1.25)} title="放大" aria-label="放大"><ZoomIn size={16} /></button>
+          <span className="graph-float-sep" />
+          <button type="button" className="graph-float-btn" onClick={fitGraph} title="适配全图（F）" aria-label="适配全图"><Focus size={16} /></button>
+          <button type="button" className="graph-float-btn" onClick={relayout} title="重新布局" aria-label="重新布局"><RefreshCw size={15} /></button>
+          <button type="button" className="graph-float-btn" onClick={exportImage} title="导出为图片" aria-label="导出为图片"><ImageIcon size={16} /></button>
+          <span className="graph-float-sep" />
+          <button type="button" className="graph-float-btn" onClick={toggleFullscreen} title={fullscreen ? '退出全屏（Esc）' : '全屏查看'} aria-label={fullscreen ? '退出全屏' : '全屏查看'}>{fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+          {!inspectorOpen && <button type="button" className="graph-float-btn inspector-reopen" onClick={() => setInspectorOpen(true)} title="展开检查器" aria-label="展开检查器"><PanelRightOpen size={16} /></button>}
+        </div>
         {(neighborsObject || connecting) && <div className="graph-banner">{connecting ? <><Link2 size={14} /><span>连线模式：按住起点对象拖到终点对象，松开后填写关系信息。</span><button type="button" onClick={() => setConnecting(false)}>退出（Esc）</button></> : <><Crosshair size={14} /><span>正在查看“{neighborsObject.display_name}”及其直接关联的 {Math.max(0, scope.inScope.size - 1)} 个对象</span><button type="button" onClick={() => setNeighborsOf('')}>返回全图</button></>}</div>}
         {!objects.length && <div className="graph-empty"><NetworkIcon size={34} /><strong>还没有对象类型</strong><span>新建第一个对象后，本体图谱会在这里生成。也可以双击画布空白处直接新建。</span><button className="btn primary small" onClick={() => openCreateObject()}><Plus size={14} /> 新建对象类型</button></div>}
         {objects.length > 0 && !scope.inScope.size && <div className="graph-empty soft"><Boxes size={30} /><strong>当前过滤条件下没有对象</strong><button className="btn secondary small" onClick={() => { setDomainIds(new Set()); setCoreOnly(false); setNeighborsOf(''); }}>清除过滤</button></div>}
@@ -497,7 +567,7 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
       </div>
     </section>
     {inspectorOpen && <aside className="inspector">
-      <div className="inspector-title"><NetworkIcon size={18} /><div><h3>本体检查器</h3><p>选中对象或关系后可直接编辑、删除</p></div>{selection && <button className="icon-btn" onClick={() => setSelection(null)} aria-label="取消选择" title="取消选择"><X size={15} /></button>}</div>
+      <div className="inspector-title"><NetworkIcon size={18} /><div><h3>本体检查器</h3><p>选中对象或关系后可直接编辑、删除</p></div>{selection && <button className="icon-btn" onClick={() => setSelection(null)} aria-label="取消选择" title="取消选择"><X size={15} /></button>}<button className="icon-btn inspector-collapse" onClick={() => setInspectorOpen(false)} aria-label="收起检查器" title="收起检查器"><PanelRightClose size={15} /></button></div>
       {selectedObject ? <ObjectInspector object={selectedObject} color={colorOf(selectedObject)} relations={relationsOf(selectedObject.id)} onEdit={() => editObject(selectedObject)} onCopy={() => copyObject(selectedObject)} onRemove={() => setRemoving({ kind: 'object', item: selectedObject })} onToggleCore={() => toggleCore(selectedObject)} onNeighbors={() => showNeighbors(selectedObject.id)} onAddLink={() => openCreateLink({ source_object_type_id: selectedObject.id })} onSelectLink={(id) => setSelection({ kind: 'edge', id })} onEditLink={(id) => editLink(linkById.get(id))} onRemoveLink={(id) => setRemoving({ kind: 'link', item: linkById.get(id) })} onEditProperty={(key) => editProperty(selectedObject, 'object', key)} onRemoveProperty={(key) => removeProperty(selectedObject, 'object', key)} onAddProperty={() => editProperty(selectedObject, 'object')} onOpenList={() => navigate('/ontology/model/object-types')} />
         : selectedLink ? <LinkInspector link={selectedLink} onEdit={() => editLink(selectedLink)} onCopy={() => copyLink(selectedLink)} onRemove={() => setRemoving({ kind: 'link', item: selectedLink })} onLocate={locate} onEditObject={(id) => editObject(objectById.get(id))} onEditProperty={(key) => editProperty(selectedLink, 'link', key)} onRemoveProperty={(key) => removeProperty(selectedLink, 'link', key)} onAddProperty={() => editProperty(selectedLink, 'link')} />
           : <OverviewInspector stats={stats} subjects={visibleSubjects} subjectFocus={subjectFocus} onSubject={(id) => setSubjectFocus(subjectFocus === id ? '' : id)} onEditSubject={(id) => setEditor({ kind: 'subject', item: subjectById(id) })} onRemoveSubject={(id) => setRemoving({ kind: 'subject', item: subjectById(id) })} coreObjects={objects.filter((item) => item.is_core && scope.inScope.has(item.id))} onLocate={locate} onEditObject={(id) => editObject(objectById.get(id))} onUncore={(id) => toggleCore(objectById.get(id))} onCreate={() => openCreateObject()} />}

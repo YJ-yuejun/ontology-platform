@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Layers3, Star } from 'lucide-react';
 import { api } from '../api';
-import { dataTypeLabel, designStatusLabel, designStatusValue, STATUS_OPTIONS } from '../labels';
+import { dataTypeLabel, designStatusLabel, designStatusValue, OBJECT_CATEGORY_HINTS, OBJECT_CATEGORY_OPTIONS, STATUS_OPTIONS } from '../labels';
 import Modal from './Modal';
-import { ObjectIconPicker } from './ObjectTypeIcon';
+import { OBJECT_ICON_OPTIONS } from './ObjectTypeIcon';
 import PropertyEditor, { emptyProperty } from './PropertyEditor';
 import { governanceFieldCandidates } from '../objectMapping';
 
@@ -142,22 +142,43 @@ export default function ObjectTypeEditor({ activeId, editing, initial, notify, o
   };
   // 状态属性下拉：模板字段是“状态属性”语义，这里只允许选标注为状态属性或枚举类型的属性。
   const statePropertyOptions = form.properties.filter((item) => item.key && (item.property_category === '状态属性' || item.type === 'enum'));
+  const categoryOptions = OBJECT_CATEGORY_OPTIONS.some(([value]) => value === form.category) || !form.category
+    ? OBJECT_CATEGORY_OPTIONS
+    : [[form.category, `${form.category}（历史值）`], ...OBJECT_CATEGORY_OPTIONS];
+  const iconOptions = OBJECT_ICON_OPTIONS.some((item) => item.key === form.icon) ? OBJECT_ICON_OPTIONS : [{ key: form.icon || 'box', label: form.icon || '原图标', Icon: OBJECT_ICON_OPTIONS[0].Icon }, ...OBJECT_ICON_OPTIONS];
+  const selectedIconLabel = iconOptions.find((item) => item.key === form.icon)?.label || '通用对象';
 
-  return <Modal wide closeOnBackdrop={false} title={editing ? `编辑对象类型 · ${editing.display_name}` : '新建对象类型'} subtitle="身份、归属、属性与接口在同一页完成" onClose={onClose} footer={<><button className="btn secondary" onClick={onClose}>取消</button><button className="btn primary" form="object-form" disabled={busy}>{busy ? '保存中…' : '保存到工作状态'}</button></>}>
+  return <Modal wide closeOnBackdrop={false} title={editing ? `编辑对象类型 · ${editing.display_name}` : '新建对象类型'} subtitle="先填最少必要信息，其他设置可后补" onClose={onClose} footer={<><button className="btn secondary" onClick={onClose}>取消</button><button className="btn primary" form="object-form" disabled={busy}>{busy ? '保存中…' : '保存到工作状态'}</button></>}>
     {formError && <div className="form-error-banner" role="alert">{formError}</div>}
+    <div className="object-editor-tip"><b>最少需要：</b>显示名称、稳定标识、至少 1 个主键属性。接口、状态属性、更多设置均可在保存后补充。</div>
     <form id="object-form" className="form-sections object-editor" onSubmit={save}>
-      <section className="form-section"><h3>对象身份</h3><div className="form-grid two">
-        <label><span>显示名称</span><input autoFocus required value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} placeholder="例如：采购合同" /></label>
-        <label><span>稳定标识（API 名称）</span><input className="mono" required disabled={editing && ['active', 'promoted'].includes(editing.status)} aria-invalid={Boolean(form.name && !OBJECT_API_NAME_PATTERN.test(form.name))} value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setFormError(''); }} placeholder="PurchaseContract" />{form.name && !OBJECT_API_NAME_PATTERN.test(form.name) ? <small className="field-error">必须以大写英文字母开头，只能包含英文字母和数字，例如 PurchaseContract。</small> : <small>供接口和程序稳定引用，发布后不可直接修改。</small>}</label>
-        <label><span>资源使用状态</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{STATUS_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><small>仅表示资源是否可用，不等同模板“建模状态”。</small></label>
-        <label><span>主题域</span><select value={form.subject_domain_id || ''} onChange={(e) => changeSubject(e.target.value)}><option value="">暂不分类</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.business_domain_name} / {item.name}</option>)}</select><small>可暂不分类，但提交评审前必须归入主题域。业务域由所选主题域带出，不用单独填写。</small></label>
-      </div>
-        <label className="core-object-toggle"><input type="checkbox" checked={Boolean(form.is_core)} onChange={(e) => setForm({ ...form, is_core: e.target.checked })} /><Star size={15} /><span><b>核心对象</b><small>业务链路的中心对象。本体图谱中会加粗、放大并标记 ★，可用“仅看核心对象”快速聚焦。</small></span></label>
-        <label><span>选择图标</span><ObjectIconPicker value={form.icon} onChange={(icon) => setForm({ ...form, icon })} /></label>
-        <label><span>业务定义</span><textarea value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="说明对象的身份、业务边界和生命周期" /></label>
+      <section className="form-section">
+        <div className="form-section-heading"><div><h3>对象身份</h3><p>对象名称、稳定标识和所属主题域。</p></div><span className="required-chip">必填 2 项</span></div>
+        <div className="form-grid two">
+          <label><span>显示名称</span><input autoFocus required value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })} placeholder="例如：采购合同" /></label>
+          <label><span>稳定标识（API 名称）</span><input className="mono" required disabled={editing && ['active', 'promoted'].includes(editing.status)} aria-invalid={Boolean(form.name && !OBJECT_API_NAME_PATTERN.test(form.name))} value={form.name} onChange={(e) => { setForm({ ...form, name: e.target.value }); setFormError(''); }} placeholder="PurchaseContract" />{form.name && !OBJECT_API_NAME_PATTERN.test(form.name) ? <small className="field-error">必须以大写英文字母开头，只能包含英文字母和数字，例如 PurchaseContract。</small> : <small>供接口和程序引用，发布后不可直接修改。</small>}</label>
+          <label><span>对象类别</span><select value={form.category || '业务实体'} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categoryOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><small>用于列表分类，不改变资源状态。</small></label>
+          <label><span>主题域</span><select value={form.subject_domain_id || ''} onChange={(e) => changeSubject(e.target.value)}><option value="">暂不分类</option>{subjects.map((item) => <option key={item.id} value={item.id}>{item.business_domain_name} / {item.name}</option>)}</select><small>可暂不分类，评审前补齐；业务域由主题域带出。</small></label>
+        </div>
+        <div className="object-icon-line">
+          <span className="object-icon-label">对象图标</span>
+          <div className="object-icon-compact" role="radiogroup" aria-label="对象图标">
+            {iconOptions.map(({ key, label, Icon }) => <button type="button" key={key} role="radio" aria-checked={form.icon === key} aria-label={label} title={label} className={form.icon === key ? 'selected' : ''} onClick={() => setForm({ ...form, icon: key })}><Icon size={16} /></button>)}
+          </div>
+          <small>{selectedIconLabel} · 图谱和目录中显示在名称左侧</small>
+        </div>
+        <details className="object-more-settings">
+          <summary>更多设置（可选）</summary>
+          <label><span>业务定义</span><textarea rows={2} value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="一句话说明对象是什么、边界在哪，可后补" /></label>
+          <div className="form-grid two">
+            <label><span>资源使用状态</span><select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>{STATUS_OPTIONS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><small>仅表示资源是否可用，不等同模板“建模状态”。</small></label>
+            <label className="core-object-toggle"><input type="checkbox" checked={Boolean(form.is_core)} onChange={(e) => setForm({ ...form, is_core: e.target.checked })} /><Star size={15} /><span><b>核心对象</b><small>图谱中加粗、放大并标记 ★，可用“仅看核心对象”快速聚焦。</small></span></label>
+          </div>
+        </details>
       </section>
 
-      <section className="form-section"><h3>对象属性</h3>
+      <section className="form-section">
+        <div className="form-section-heading"><div><h3>对象属性</h3><p>至少 1 项；第一项会自动设为主键，可改选其他属性。</p></div><span className="required-chip">必填 1 项主键</span></div>
         {!editing && <details className="object-asset-basis"><summary>从已确认治理资产带入字段（可选）</summary>
           <p className="form-hint">只读取已确认资产的字段元数据作为待确认候选，不选择物理表，也不建立数据连接或映射。</p>
           <label><span>选择已确认治理资产</span><select value={selectedAssetCode} onChange={(event) => { setSelectedAssetCode(event.target.value); setSelectedCandidateFields([]); }}><option value="">请选择已确认资产</option>{confirmedAssets.map((asset) => <option key={asset.id} value={asset.code}>{asset.name} · {asset.code}</option>)}</select></label>
@@ -165,17 +186,20 @@ export default function ObjectTypeEditor({ activeId, editing, initial, notify, o
           {selectedAsset && <div className="oma-asset-candidate-list"><div><strong>{selectedAsset.name} · 字段候选</strong><small>字段名称和登记类型仅是元数据；中文业务名称、含义和主键均需你确认。</small></div><div className="oma-asset-candidate-rows">{governanceFieldCandidates(selectedAsset.fields || []).map((candidate) => <label key={candidate.candidateKey}><input type="checkbox" checked={selectedCandidateFields.includes(candidate.candidateKey)} onChange={() => setSelectedCandidateFields((old) => old.includes(candidate.candidateKey) ? old.filter((key) => key !== candidate.candidateKey) : [...old, candidate.candidateKey])} /><span><strong>{candidate.sourceField}</strong><small>{candidate.declaredType || '类型未登记'}</small></span><code>{candidate.candidateKey} · {dataTypeLabel(candidate.candidateType)} 候选</code></label>)}{!selectedAsset.fields?.length && <p className="template-field-note">该资产还没有字段契约；可先继续填写对象业务语义。</p>}</div><button type="button" className="btn secondary small" disabled={!selectedCandidateFields.length} onClick={addSelectedFieldCandidates}>将选中字段加入属性草稿</button></div>}
         </details>}
         {!editing && candidateHints.length > 0 && <div className="template-field-note">已暂存 {candidateHints.length} 个治理字段属性候选；请在下方补全中文名称与业务定义。它们尚未保存为对象属性，也没有建立映射。</div>}
-        <PropertyEditor primaryKey templateMode label="对象属性" value={form.properties} onChange={(properties) => setForm({ ...form, properties })} />
-        <div className="form-grid two">
-          <label><span>标题属性</span><select value={form.title_property || ''} onChange={(e) => setForm({ ...form, title_property: e.target.value })}><option value="">默认使用主键</option>{form.properties.filter((item) => item.key).map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}</select><small>实例列表和关系穿透中用它显示对象。</small></label>
-          <label><span>状态属性</span><select value={form.state_property || ''} onChange={(e) => setForm({ ...form, state_property: e.target.value })}><option value="">未指定</option>{statePropertyOptions.map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}{form.state_property && !statePropertyOptions.some((item) => item.key === form.state_property) && <option value={form.state_property}>{form.state_property}{form.properties.some((item) => item.key === form.state_property) ? '（当前值，未标注为状态属性）' : '（原值，属性已不存在）'}</option>}</select>{statePropertyNote && <small>{statePropertyNote}</small>}</label>
-        </div>
+        <PropertyEditor primaryKey templateMode compact label="对象属性" value={form.properties} onChange={(properties) => setForm({ ...form, properties })} />
+        <details className="object-property-advanced">
+          <summary>标题属性与状态属性（可选）</summary>
+          <div className="form-grid two">
+            <label><span>标题属性</span><select value={form.title_property || ''} onChange={(e) => setForm({ ...form, title_property: e.target.value })}><option value="">默认使用主键</option>{form.properties.filter((item) => item.key).map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}</select><small>实例列表和关系穿透中用它显示对象。</small></label>
+            <label><span>状态属性</span><select value={form.state_property || ''} onChange={(e) => setForm({ ...form, state_property: e.target.value })}><option value="">未指定</option>{statePropertyOptions.map((item) => <option key={item.key} value={item.key}>{item.name || item.key} · {item.key}</option>)}{form.state_property && !statePropertyOptions.some((item) => item.key === form.state_property) && <option value={form.state_property}>{form.state_property}{form.properties.some((item) => item.key === form.state_property) ? '（当前值，未标注为状态属性）' : '（原值，属性已不存在）'}</option>}</select>{statePropertyNote && <small>{statePropertyNote}</small>}</label>
+          </div>
+        </details>
       </section>
 
-      <section className="form-section"><h3>实现接口</h3>
+      <details className="form-section object-advanced"><summary><Layers3 size={15} /> 实现接口（可选）</summary>
         <fieldset className="compact-check-field"><legend><Layers3 size={15} /> 实现接口（可选）</legend><p>接口只声明可复用的结构契约；外部系统调用在“系统能力与行动执行映射”管理。</p><div className="compact-check-list">{interfaces.map((entry) => <label key={entry.id}><input type="checkbox" checked={form.interface_ids.includes(entry.id)} onChange={() => toggleInterface(entry)} /><span><b>{entry.display_name}</b><code>{entry.name}</code><small>{entry.properties.length} 项属性契约</small></span></label>)}{!interfaces.length && <em>当前本体尚未定义接口，可先到“接口”页新建。</em>}</div></fieldset>
         <p className="template-field-note">保存只进入当前工作状态；映射需在“数据源与映射 → 语义映射”另行配置，对象保存不会导入实例，也不会自动创建业务行动。</p>
-      </section>
+      </details>
 
       {editing && <details className="object-template-source"><summary>模板来源（只读）</summary>
         <p className="form-hint">以下字段来自《本体建模模板》导入，不是平台语义，因此不在表单里编辑；原值继续保留用于溯源。</p>

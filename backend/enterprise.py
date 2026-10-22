@@ -112,6 +112,7 @@ def init_enterprise() -> None:
         CREATE TABLE IF NOT EXISTS agent_interactions (
           id TEXT PRIMARY KEY, ontology_id TEXT NOT NULL, user_message TEXT NOT NULL, answer TEXT NOT NULL,
           trace TEXT NOT NULL, action_proposal TEXT, run_mode TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL,
+          conversation_id TEXT, context TEXT,
           FOREIGN KEY(ontology_id) REFERENCES ontologies(id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS ontology_build_runs (
@@ -170,6 +171,9 @@ def init_enterprise() -> None:
     repo._ensure_column(conn, "proposal_operations", "risk", "TEXT NOT NULL DEFAULT 'low'")
     repo._ensure_column(conn, "proposal_operations", "diff_summary", "TEXT")
     repo._ensure_column(conn, "ontology_build_runs", "session_id", "TEXT")
+    repo._ensure_column(conn, "agent_interactions", "conversation_id", "TEXT")
+    repo._ensure_column(conn, "agent_interactions", "context", "TEXT")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_interactions_conversation ON agent_interactions(ontology_id, conversation_id, created_at DESC)")
     conn.commit()
     conn.close()
     source_connections.init_tables()
@@ -715,8 +719,11 @@ def save_resource(ontology_id: str, kind: str, data: EnterpriseResourceBase, res
         data = data.model_copy(update={"payload": payload})
     if kind == "data-mappings":
         data = data.model_copy(update={"payload": _normalize_mapping_editor_payload(ontology_id, data.payload)})
-        if not resource_id and data.payload.get("mapping_editor_version") == 3 and data.payload.get("binding_mode") != "governed":
-            raise repo.ValidationError("新建语义映射必须通过治理资产绑定；旧版物理直连记录仅保留溯源")
+        # 原型阶段映射页暂时跳过数据治理层：新建映射直接绑定物理来源字段。
+        # 旧的 governed 记录仍然可读、可编辑，不会自动迁移或覆盖。
+        if not resource_id and data.payload.get("mapping_editor_version") == 3:
+            data = data.model_copy(update={"payload": {**data.payload,
+                "binding_mode": data.payload.get("binding_mode") or "direct"}})
     if kind == "governance-assets":
         _validate_governance_asset(ontology_id, data.payload)
         if resource_id:
@@ -1705,6 +1712,51 @@ def merge_proposal(proposal_id: str) -> Dict[str, Any]:
     return {"proposal_id": proposal_id, "status": status, "applied": applied, "skipped": skipped, "session_id": session_row["id"] if session_row else None}
 
 
+def _selection_detail_answer(ontology_id: str, selection: list) -> Optional[str]:
+    """在无模型可用时，针对选中资源给出确定性的结构化回答。"""
+    if not selection:
+        return None
+    first = selection[0] or {}
+    stype = first.get("type")
+    detail = first.get("detail") or {}
+    if stype == "attribute":
+        raw_id = str(first.get("id") or "")
+        object_id = detail.get("objectId") or raw_id.split(":")[0]
+        key = detail.get("key") or (raw_id.split(":", 1)[1] if ":" in raw_id else "")
+        try:
+            obj = repo.get_object_type(object_id)
+        except Exception:
+            obj = None
+        if not obj:
+            return None
+        prop = next((item for item in obj.get("properties", []) if item.get("key") == key), None)
+        if not prop:
+            return None
+        mappings = [item for item in list_resources(ontology_id, "data-mappings") if item.get("mapping_type") == "property" and item.get("target_object_type") == obj.get("name") and item.get("target_property") == key]
+        status = "已映射" if mappings else "未映射"
+        flags = "、".join(flag for flag in [("主键" if prop.get("is_primary_key") else ""), ("必填" if prop.get("is_required") else "")] if flag) or "无特殊约束"
+        description = prop.get("description") or prop.get("business_definition") or "尚未填写业务定义"
+        return (f"属性「{prop.get('name')}」属于对象「{obj.get('display_name')}」"
+                f"（{obj.get('business_domain_name') or '未分类'} / {obj.get('subject_domain_name') or '未分类'}）。"
+                f"字段名 {key}，数据类型 {prop.get('type')}，约束：{flags}。"
+                f"业务定义：{description}。当前映射状态：{status}"
+                f"{'（' + str(len(mappings)) + ' 条映射）' if mappings else '，建议优先补映射'}。")
+    if stype == "object_type":
+        try:
+            obj = repo.get_object_type(first.get("id"))
+        except Exception:
+            obj = None
+        if not obj:
+            return None
+        props = obj.get("properties") or []
+        pk = next((item.get("name") for item in props if item.get("is_primary_key")), "未定义")
+        return (f"对象「{obj.get('display_name')}」（{obj.get('name')}）属于 "
+                f"{obj.get('business_domain_name') or '未分类'} / {obj.get('subject_domain_name') or '未分类'}，"
+                f"共 {len(props)} 个属性，主键为「{pk}」。可以在对象属性页查看每个属性的定义与映射状态，"
+                f"或继续选中具体属性追查口径。")
+    return None
+
+
 def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
     ontology = repo.get_ontology(ontology_id)
     objects, links, rules, actions = repo.list_object_types(ontology_id), repo.list_link_types(ontology_id), repo.list_business_rules(ontology_id), repo.list_actions(ontology_id)
@@ -1717,10 +1769,15 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
         if matching_action:
             action_proposal = {"action_id": matching_action["id"], "action": matching_action["display_name"], "target": matching_action["target_display_name"], "confirmation_required": not request.confirm_action, "status": "executed_demo" if request.confirm_action else "awaiting_confirmation", "note": "高风险动作在原型中只演示确认与审计，不写入生产系统。"}
             trace.append({"tool": "ontology.action", "label": matching_action["display_name"], "status": "confirmed" if request.confirm_action else "confirmation_required", "result": action_proposal["status"]})
-    context = {"ontology": ontology["name"], "objects": [item["display_name"] for item in objects], "links": [item["display_name"] for item in links], "rules": [item["display_name"] for item in rules], "actions": [item["display_name"] for item in actions]}
+    selection = request.context.get("selection") or []
+    selection_answer = _selection_detail_answer(ontology_id, selection) if selection else None
+    if selection:
+        labels = "、".join(str(item.get("label") or item.get("id")) for item in selection[:8])
+        trace.append({"tool": "ontology.selection", "label": "读取选中资源", "status": "completed", "result": f"{len(selection)} 项：{labels}"})
+    context = {"ontology": ontology["name"], "objects": [item["display_name"] for item in objects], "links": [item["display_name"] for item in links], "rules": [item["display_name"] for item in rules], "actions": [item["display_name"] for item in actions], "selection": selection}
     run_mode = "deepseek"
     try:
-        result, _ = _call_deepseek("你是企业本体运行时助手。只基于给定本体资源回答；说明使用了哪些对象、关系、规则或动作；不伪造实例；涉及写操作必须先要求确认。返回 JSON：{answer:string}。", f"本体上下文：{_json(context)}\n用户：{request.message}\n动作确认状态：{request.confirm_action}")
+        result, _ = _call_deepseek("你是企业本体运行时助手。只基于给定本体资源回答；说明使用了哪些对象、关系、规则或动作；不伪造实例；涉及写操作必须先要求确认。用户可能选中了若干资源，优先围绕选中资源回答，并说明依据。返回 JSON：{answer:string}。", f"本体上下文：{_json(context)}\n选中资源：{_json(selection)}\n用户：{request.message}\n动作确认状态：{request.confirm_action}")
         answer = result.get("answer") or "已完成基于本体的分析。"
     except Exception:
         run_mode = "demo_fallback"
@@ -1728,6 +1785,11 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
             answer = f"我已在“{ontology['name']}”中定位到可执行动作“{action_proposal['action']}”。这是写操作，需要你确认后才能继续；当前未对任何业务数据做修改。"
         elif action_proposal:
             answer = f"已完成“{action_proposal['action']}”的受控演示执行，并记录动作轨迹。正式环境需由 Action 映射调用业务系统并回写结果。"
+        elif selection_answer:
+            answer = selection_answer
+        elif selection:
+            labels = "、".join(str(item.get("label") or item.get("id")) for item in selection[:8])
+            answer = f"已读取你选中的 {len(selection)} 项资源：{labels}。围绕“{request.message}”，我会先确认它所属的对象、业务定义与映射状态，再给出解释或修改建议。当前为只读演示，不会直接改动本体模型。"
         elif "压力" in request.message and any(item["name"] == "PipeSegment" for item in objects):
             trace.extend([
                 {"tool": "ontology.resolve", "label": "解析入口对象：管段", "status": "completed", "result": "PipeSegment"},
@@ -1745,11 +1807,82 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
         else:
             answer = f"当前“{ontology['name']}”包含 {len(objects)} 类对象、{len(links)} 类关系、{len(rules)} 条规则和 {len(actions)} 个动作。我会先沿对象与关系定位业务上下文，再调用确定性规则；只有需要解释的部分交给模型。"
     interaction_id, timestamp = str(uuid.uuid4()), repo.now()
+    conversation_id = str((request.context or {}).get("conversation_id") or "").strip() or str(uuid.uuid4())
     conn = repo.get_conn()
-    conn.execute("INSERT INTO agent_interactions VALUES (?,?,?,?,?,?,?,?,?)", (interaction_id, ontology_id, request.message, answer, _json(trace), _json(action_proposal) if action_proposal else None, run_mode, "deepseek-v4-flash", timestamp))
+    conn.execute("""INSERT INTO agent_interactions
+        (id,ontology_id,user_message,answer,trace,action_proposal,run_mode,model,created_at,conversation_id,context)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (interaction_id, ontology_id, request.message, answer, _json(trace),
+         _json(action_proposal) if action_proposal else None, run_mode, "deepseek-v4-flash",
+         timestamp, conversation_id, _json(request.context or {})))
     conn.commit()
     conn.close()
-    return {"id": interaction_id, "answer": answer, "trace": trace, "action_proposal": action_proposal, "model": "deepseek-v4-flash", "run_mode": run_mode}
+    return {"id": interaction_id, "conversation_id": conversation_id, "answer": answer, "trace": trace,
+            "action_proposal": action_proposal, "model": "deepseek-v4-flash", "run_mode": run_mode}
+
+
+def agent_history(ontology_id: str, limit: int = 100) -> Dict[str, Any]:
+    """Group stored agent interactions into conversation history for the console."""
+    repo.get_ontology(ontology_id)
+    conn = repo.get_conn()
+    rows = conn.execute("""SELECT * FROM agent_interactions
+        WHERE ontology_id=? ORDER BY created_at DESC LIMIT ?""",
+        (ontology_id, max(1, min(limit, 300)))).fetchall()
+    conn.close()
+    groups: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        item = dict(row)
+        conversation_id = item.get("conversation_id") or f"legacy:{item['id']}"
+        try:
+            initial_context = json.loads(item.get("context") or "{}")
+        except json.JSONDecodeError:
+            initial_context = {}
+        group = groups.setdefault(conversation_id, {
+            "id": conversation_id, "title": "", "updated_at": item["created_at"],
+            "message_count": 0, "messages": [], "rows": [],
+            "mode": initial_context.get("mode") or "agent",
+        })
+        group["rows"].append(item)
+        if item["created_at"] > group["updated_at"]:
+            group["updated_at"] = item["created_at"]
+    conversations = []
+    for group in groups.values():
+        chronological = sorted(group["rows"], key=lambda item: item["created_at"])
+        messages = []
+        for item in chronological:
+            try:
+                context = json.loads(item.get("context") or "{}")
+            except json.JSONDecodeError:
+                context = {}
+            try:
+                trace = json.loads(item.get("trace") or "[]")
+            except json.JSONDecodeError:
+                trace = []
+            try:
+                action_proposal = json.loads(item["action_proposal"]) if item.get("action_proposal") else None
+            except json.JSONDecodeError:
+                action_proposal = None
+            user_message = {
+                "role": "user", "text": item["user_message"], "created_at": item["created_at"],
+                "resources": context.get("selection") or [],
+                "thinking_mode": bool(context.get("thinking_mode")),
+                "web_search": bool(context.get("web_search")),
+            }
+            assistant_message = {
+                "role": "assistant", "text": item["answer"], "trace": trace,
+                "action_proposal": action_proposal, "run_mode": item["run_mode"],
+                "model": item["model"], "created_at": item["created_at"],
+            }
+            messages.append(user_message)
+            messages.append(assistant_message)
+            if not group["title"]:
+                group["title"] = item["user_message"][:60]
+        conversations.append({
+            "id": group["id"], "title": group["title"] or "未命名对话", "mode": group["mode"],
+            "updated_at": group["updated_at"], "message_count": len(messages), "messages": messages,
+        })
+    conversations.sort(key=lambda item: item["updated_at"], reverse=True)
+    return {"conversations": conversations, "total": len(conversations)}
 
 
 def _merge_resource_defaults(ontology_id: str, kind: str, code: str, name: str, category: str, description: str, defaults: Dict[str, Any]) -> Dict[str, Any]:

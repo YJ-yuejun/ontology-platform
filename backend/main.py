@@ -732,6 +732,11 @@ def ontology_agent_chat(ontology_id: str, data: AgentChatRequest):
     return enterprise.agent_chat(ontology_id, data)
 
 
+@app.get("/api/ontologies/{ontology_id}/agent/history")
+def ontology_agent_history(ontology_id: str, limit: int = Query(default=100, ge=1, le=300)):
+    return enterprise.agent_history(ontology_id, limit)
+
+
 FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 if (FRONTEND_DIST / "assets").exists():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")

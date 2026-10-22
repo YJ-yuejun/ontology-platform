@@ -1,5 +1,5 @@
 export const RESOURCE_KINDS = [
-  { id: 'business_domain', label: '业务域与主题域', route: '/ontology/model/domains', hint: '组织对象所属的业务分类' },
+  { id: 'business_domain', label: '业务主题', route: '/ontology/model/domains', hint: '组织对象所属的业务分类' },
   { id: 'object_type', label: '对象类型', route: '/ontology/model/object-types', hint: '定义业务对象及其属性' },
   { id: 'link_type', label: '关系类型', route: '/ontology/model/link-types', hint: '关联已有对象，明确方向与基数', needsObjects: true },
   { id: 'business_rule', label: '规则', route: '/ontology/logic/definitions', hint: '描述输入、判断逻辑与输出' },

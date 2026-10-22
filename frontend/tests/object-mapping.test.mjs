@@ -50,6 +50,7 @@ test('object mapping state reflects saved mapping rows only', () => {
   assert.equal(conflictingState.pendingCount, 1);
   assert.equal(objectMappingState(object, [mapping('amount', { design_status: '', status: 'active' })]).label, '部分映射');
   assert.equal(objectMappingState(object, [mapping('amount', { binding_mode: 'physical', status: 'active' })]).label, '待确认');
+  assert.equal(objectMappingState(object, [mapping('contractId', { binding_mode: 'direct' }), mapping('amount', { binding_mode: 'direct' })]).label, '已确认');
   assert.equal(objectMappingState(object, [{ mapping_type: 'relation', target_object_type: object.name }]).label, '未绑定');
   assert.equal(objectMappingState(object, [mapping('missing')]).label, '待确认');
 });

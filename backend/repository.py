@@ -401,6 +401,8 @@ def init_db() -> None:
         from governance_insights import init_tables as init_governance_insights
         init_governance_insights()
         seed_pipeline_domain()
+        from procurement_mapping_seed import seed_procurement_mapping_demo
+        seed_procurement_mapping_demo()
         repair_data_source_provenance()
         repair_mapping_type_contract()
         migrate_mapping_way_codes()
@@ -2373,11 +2375,18 @@ def seed_domain_hierarchy() -> None:
     """Create the two-level governance taxonomy and classify objects directly."""
     plans = {
         "enterprise.supplychain.manual": [
-            ("procurement", "采购管理域", "procurement.master", "采购主数据主题", ["Department","Supplier","Organization"]),
-            ("procurement", "采购管理域", "procurement.sourcing", "采购寻源主题", ["ProcurementRequest","PurchaseOrder"]),
-            ("procurement", "采购管理域", "procurement.contract", "合同履约主题", ["Contract","AcceptanceRecord","Project"]),
-            ("finance", "财务管理域", "finance.settlement", "应付结算主题", ["Budget","Invoice","PaymentRequest","AccountingVoucher"]),
-            ("finance", "财务管理域", "finance.risk", "财务风控主题", ["RiskReviewTask"]),
+            ("procurement", "采购管理域", "procurement.master", "采购主数据主题",
+             ["Supplier", "OrganizationUnit", "Product", "ProductCopy", "PurchaseCategory", "SupplierQualification", "SupplierPerformance", "Employee"]),
+            ("procurement", "采购管理域", "procurement.sourcing", "采购执行主题",
+             ["PurchasePlan", "SourcingEvent", "SupplierQuotation", "PriceAgreement", "PurchaseRequest", "PurchaseOrder", "PurchaseOrderCopy", "DeliverySchedule", "GoodsReceipt", "ReturnOrder"]),
+            ("procurement", "采购管理域", "procurement.contract", "合同履约主题",
+             ["Contract", "AcceptanceRecord", "Project", "ContractAmendment", "ContractMilestone"]),
+            ("finance", "财务管理域", "finance.settlement", "应付结算主题",
+             ["Invoice", "InvoiceLine", "PaymentRequest", "PaymentPlan", "PaymentAllocation"]),
+            ("finance", "财务管理域", "finance.budget", "预算与成本主题",
+             ["Budget", "BudgetLine", "BudgetAdjustment", "CostCenter", "ExpenseClaim", "ExpenseItem", "AssetCard", "DepreciationPlan"]),
+            ("finance", "财务管理域", "finance.risk", "财务运营与风控主题",
+             ["AccountingVoucher", "RiskReviewTask", "BankAccount", "FundPlan", "ExchangeRate", "TaxRate", "ComplianceCheck", "AuditFinding", "RiskAlert"]),
         ],
         "enterprise.pipeline.operations.manual": [
             ("commercial", "经营管理域", "commercial.contract", "客户合同主题", ["Customer","Contract"]),

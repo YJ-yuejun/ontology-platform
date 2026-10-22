@@ -4,7 +4,7 @@ import {
   Activity, ArrowLeft, BookOpen, Bot, Boxes, Building2, Check, ChevronDown, ChevronLeft, ChevronRight,
   ClipboardList, Database, FileText, GitBranch, Hammer, History, ListChecks, ListTree, Menu,
   Library, MessageSquareText, Network, Plus, Search, Settings, ShieldCheck, Sparkles, Layers3,
-  Waypoints, Workflow,
+  Waypoints, Workflow, LogOut, MoreHorizontal, UserRound,
 } from 'lucide-react';
 import { api } from './api';
 import Modal from './components/Modal';
@@ -31,6 +31,10 @@ import DataMappingStudio from './pages/DataMappingStudio';
 import DomainHierarchy from './pages/DomainHierarchy';
 import Interfaces from './pages/Interfaces';
 import BuildChat from './pages/BuildChat';
+import AssistantPage from './assistant/AssistantPage';
+import AssistantDock from './assistant/AssistantDock';
+import { AssistantProvider } from './assistant/AssistantContext';
+import './assistant/assistant.css';
 import CreateOntologyWizard from './components/CreateOntologyWizard';
 import ModelingEntry, { ModelingEntryContext } from './components/ModelingEntry';
 import { launchBuild } from './buildConversation';
@@ -48,12 +52,13 @@ const MAIN_NAV = [
 
 const ONTOLOGY_NAV = [
   { id: 'workbench', label: '工作区', items: [
+    { to: '/ontology/ai', label: '本体智能', icon: Sparkles },
     { to: '/ontology/overview', label: '本体工作台', icon: Library },
     { to: '/ontology/graph', label: '本体图谱', icon: Network },
     { to: '/ontology/scenarios', label: '业务场景', icon: Workflow },
   ] },
   { id: 'model', label: '本体模型', items: [
-    { to: '/ontology/model/domains', label: '业务域与主题域', icon: Building2 },
+    { to: '/ontology/model/domains', label: '业务主题', icon: Building2 },
     { to: '/ontology/model/object-types', label: '对象类型', icon: Boxes },
     { to: '/ontology/model/object-properties', label: '对象属性', icon: ListTree, child: true },
     { to: '/ontology/model/link-types', label: '关系类型', icon: GitBranch },
@@ -80,9 +85,10 @@ const ONTOLOGY_NAV = [
 ];
 
 const TITLES = {
+  '/ontology/ai': ['本体智能', '选中页面资源，让 AI 解释、检查或起草修改'],
   '/ontology/overview': ['本体工作台', '发现本体并进入具体业务语义空间'],
   '/ontology/scenarios': ['业务场景', '用真实业务闭环校验本体覆盖度'],
-  '/ontology/model/domains': ['业务域与主题域', '以两级分类组织对象类型的业务边界'],
+  '/ontology/model/domains': ['业务主题', '用业务域和主题域两级分类组织对象类型'],
   '/ontology/model/object-types': ['对象类型', '管理可识别、可关联、可产生实例的业务对象'],
   '/ontology/model/object-properties': ['对象属性', '汇总查看全部对象类型的属性定义与映射情况'],
   '/ontology/model/interfaces': ['接口', '单独管理跨对象类型的统一属性契约'],
@@ -91,7 +97,7 @@ const TITLES = {
   '/ontology/model/actions': ['动作类型', '定义对象允许执行的业务动作契约'],
   '/ontology/graph': ['本体图谱', '从全局查看并直接维护对象与关系组成的语义网络'],
   '/ontology/data/instances': ['实例数据', '查看业务对象实例并沿关系穿透完整业务链'],
-  '/ontology/data/connections': ['数据源与映射', '经数据治理层把物理来源关联到稳定业务语义'],
+  '/ontology/data/connections': ['数据源与映射', '默认按物理表到对象类型聚合，可下钻查看表字段到对象属性的映射图谱'],
   '/ontology/logic/definitions': ['规则', '管理确定性业务逻辑并作为智能体工具复用'],
   '/ontology/logic/execution': ['系统能力与执行映射', '把本体动作受控绑定到企业系统接口与操作能力'],
   '/ontology/governance/security': ['权限策略', '统一治理对象、属性和动作访问边界'],
@@ -102,16 +108,36 @@ const TITLES = {
   '/ontology/governance/compare': ['本体版本对比', '按发布快照对比语义模型变更'],
 };
 
-function PlatformSidebar({ collapsed, onToggle }) {
+function PlatformSidebar({ collapsed, onToggle, onLogout }) {
   const navigate = useNavigate();
   const isChat = useLocation().pathname === '/chat';
   const [expanded, setExpanded] = useState({});
+  const [userOpen, setUserOpen] = useState(false);
   return <aside className="platform-main-sidebar">
-    <button className="platform-collapse" onClick={onToggle} title={collapsed ? '展开平台导航' : '收起平台导航'}>{collapsed ? <ChevronRight size={18} /> : <><ChevronLeft size={17} /><span>收起平台导航</span></>}</button>
+    <div className="platform-sidebar-brand">
+      {collapsed
+        ? <button className="brand-logo collapsed" onClick={onToggle} title="展开平台导航"><Waypoints size={19} /></button>
+        : <><span className="brand-logo"><Waypoints size={19} /></span><span className="brand-copy"><b>本体技能开发</b><small>企业语义与行动层</small></span><button className="brand-collapse" onClick={onToggle} title="收起平台导航"><ChevronLeft size={16} /></button></>}
+    </div>
     <nav>{MAIN_NAV.map((item) => <div className="platform-main-group" key={item.label}>
       <button className={`platform-main-item ${(isChat ? item.label === '智能问答' : item.active) ? 'active' : ''}`} title={collapsed ? item.label : undefined} onClick={() => item.label === '智能问答' ? navigate('/chat') : item.label === '本体中心' ? navigate('/ontology/overview') : item.children && setExpanded((old) => ({ ...old, [item.label]: !old[item.label] }))}><item.icon size={17} /><span>{item.label}</span>{item.children && <ChevronDown size={14} className={expanded[item.label] ? 'open' : ''} />}</button>
       {!collapsed && item.children && expanded[item.label] && <div className="platform-main-children">{item.children.map((child) => <button key={child}>{child}</button>)}</div>}
     </div>)}</nav>
+    <div className="platform-user-footer">
+      <button className={`platform-user-card ${userOpen ? 'open' : ''}`} onClick={() => setUserOpen((value) => !value)} title="账号与退出">
+        <span className="platform-user-avatar">A</span>
+        {!collapsed && <span className="platform-user-copy"><b>admin</b><small>系统管理员</small></span>}
+        {!collapsed && <MoreHorizontal size={16} />}
+      </button>
+      {userOpen && <>
+        <div className="platform-user-backdrop" onClick={() => setUserOpen(false)} />
+        <div className={`platform-user-menu ${collapsed ? 'collapsed' : ''}`} role="menu">
+          <div className="platform-user-menu-head"><span className="platform-user-avatar">A</span><span><b>admin</b><small>系统管理员</small></span></div>
+          <button role="menuitem" onClick={() => { setUserOpen(false); navigate('/ontology/overview'); }}><UserRound size={14} /> 个人工作台</button>
+          <button role="menuitem" onClick={() => { setUserOpen(false); onLogout?.(); }}><LogOut size={14} /> 退出登录</button>
+        </div>
+      </>}
+    </div>
   </aside>;
 }
 
@@ -120,7 +146,7 @@ function WorkspaceTabs() {
   return <div className="workspace-tabs"><NavLink to="/chat" className={`workspace-tab ${isChat ? 'active' : 'muted'}`}>智能问答</NavLink><div className="workspace-tab muted">知识库</div><NavLink to="/ontology/overview" className={`workspace-tab ${isChat ? 'muted' : 'active'}`}>本体中心</NavLink></div>;
 }
 
-function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher, onCreate }) {
+function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher, onCreate, changeCount = 0 }) {
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState({ workbench: true, model: true, data: true, logic: true, govern: true, agent: true });
@@ -138,11 +164,12 @@ function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher
       if (!items.length) return null;
       const open = collapsed || query || expanded[group.id];
       return <section key={group.id} className="ontology-tree-section">
-        {!collapsed && <button className="ontology-tree-group" onClick={() => setExpanded((old) => ({ ...old, [group.id]: !old[group.id] }))}><span>{group.label}</span><ChevronDown size={13} className={open ? 'open' : ''} /></button>}
+        {!collapsed && <button className="ontology-tree-group" onClick={() => setExpanded((old) => ({ ...old, [group.id]: !old[group.id] }))}><span>{group.label}</span>{group.id === 'govern' && changeCount > 0 && <i className="ontology-group-notice-dot" title={`当前有 ${changeCount} 条未读变更记录`} />}<ChevronDown size={13} className={open ? 'open' : ''} /></button>}
         {open && items.map((item) => {
           const isWorkbench = item.to === '/ontology/overview';
           const to = isWorkbench && activeId ? `/ontology/overview/${activeId}` : item.to;
-          return <NavLink key={item.to} to={to} end title={collapsed ? item.label : undefined} className={({ isActive }) => `ontology-tree-item ${item.child ? 'child' : ''} ${(isActive || (isWorkbench && location.pathname.startsWith('/ontology/overview'))) ? 'active' : ''}`}><item.icon size={17} /><span>{item.label}</span></NavLink>;
+          const unread = item.to === '/ontology/governance/activity' && changeCount > 0;
+          return <NavLink key={item.to} to={to} end title={collapsed ? item.label : unread ? `${item.label}：${changeCount} 条未读变更记录` : undefined} className={({ isActive }) => `ontology-tree-item ${item.child ? 'child' : ''} ${unread ? 'has-notice' : ''} ${(isActive || (isWorkbench && location.pathname.startsWith('/ontology/overview'))) ? 'active' : ''}`}><item.icon size={17} /><span>{item.label}</span>{unread && <em className="ontology-notice-badge" aria-label={`${changeCount} 条未读变更记录`}>{changeCount > 99 ? '99+' : changeCount}</em>}</NavLink>;
         })}
       </section>;
     })}</nav>
@@ -180,6 +207,8 @@ export default function App() {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [modelingEntry, setModelingEntry] = useState(null);
   const [message, setMessage] = useState('');
+  const [changeCount, setChangeCount] = useState(0);
+  const [badgeRevision, setBadgeRevision] = useState(0);
 
   const refreshOntologies = async (preferredId) => {
     const items = await api('/api/ontologies');
@@ -187,6 +216,7 @@ export default function App() {
     const nextId = preferredId || (items.some((item) => item.id === activeId) ? activeId : items[0]?.id || '');
     setActiveId(nextId);
     if (nextId) localStorage.setItem('manual-ontology-id', nextId);
+    setBadgeRevision((value) => value + 1);
     return items;
   };
   useEffect(() => { refreshOntologies().catch((error) => setMessage(error.message)); }, []);
@@ -194,6 +224,38 @@ export default function App() {
     const resize = () => { if (window.innerWidth < 1180) { setMainCollapsed(true); setOntologyCollapsed(true); } };
     window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize);
   }, []);
+  useEffect(() => {
+    if (!activeId) { setChangeCount(0); return undefined; }
+    const seenKey = `change-log-seen:${activeId}`;
+    let cancelled = false;
+    const loadBadge = async () => {
+      try {
+        const result = await api(`/api/ontologies/${activeId}/model-changes?pending=1&page=1&page_size=100`);
+        if (cancelled) return;
+        const items = result.items || [];
+        const latest = items.reduce((value, item) => {
+          const stamp = Date.parse(item.mvc_created_at) || 0;
+          return stamp > value.stamp ? { stamp, iso: item.mvc_created_at } : value;
+        }, { stamp: 0, iso: '' });
+        if (location.pathname === '/ontology/governance/activity') {
+          if (latest.iso) { try { localStorage.setItem(seenKey, latest.iso); } catch { /* 忽略浏览器存储限制 */ } }
+          setChangeCount(0);
+          return;
+        }
+        let seenAt = '';
+        try { seenAt = localStorage.getItem(seenKey) || ''; } catch { /* 忽略浏览器存储限制 */ }
+        const seenStamp = Date.parse(seenAt) || 0;
+        if (!seenStamp) {
+          setChangeCount(Number(result.total) || items.length);
+          return;
+        }
+        setChangeCount(items.filter((item) => (Date.parse(item.mvc_created_at) || 0) > seenStamp).length);
+      } catch { /* 徽标失败不阻塞主流程 */ }
+    };
+    loadBadge();
+    const timer = window.setInterval(loadBadge, 60000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, [activeId, location.pathname, badgeRevision]);
 
   const active = useMemo(() => ontologies.find((item) => item.id === activeId), [ontologies, activeId]);
   const title = isChat ? ['智能问答', '本体建模助手'] : TITLES[location.pathname] || TITLES['/ontology/overview'];
@@ -233,17 +295,17 @@ export default function App() {
   useEffect(() => { setModelingEntry(null); }, [location.pathname, activeId]);
   const pageProps = { activeId, active, refreshOntologies, chooseOntology, notify: setMessage };
 
-  return <ModelingEntryContext.Provider value={entries}><div className={`platform-shell ${isChat ? 'chat-workspace' : ''} ${mainCollapsed ? 'main-collapsed' : ''} ${ontologyCollapsed ? 'ontology-collapsed' : ''}`}>
-    <header className="platform-topbar"><div className="platform-brand">本体技能开发</div><div className="platform-top-actions"><span>用户名：</span><a>admin</a><i /><button>退出</button></div></header>
-    <PlatformSidebar collapsed={mainCollapsed} onToggle={() => setMainCollapsed((value) => !value)} />
+  return <AssistantProvider activeId={activeId} active={active} notify={setMessage}><ModelingEntryContext.Provider value={entries}><div className={`platform-shell ${isChat ? 'chat-workspace' : ''} ${mainCollapsed ? 'main-collapsed' : ''} ${ontologyCollapsed ? 'ontology-collapsed' : ''}`}>
+    <PlatformSidebar collapsed={mainCollapsed} onToggle={() => setMainCollapsed((value) => !value)} onLogout={() => setMessage('原型演示环境，暂不执行真实退出；账号入口已移到左下角。')} />
     <div className="workspace-area"><WorkspaceTabs /><div className="workspace-body">
-      {!isChat && <OntologySidebar collapsed={ontologyCollapsed} onToggle={() => setOntologyCollapsed((value) => !value)} activeId={activeId} active={active} onOpenSwitcher={() => setSwitchOpen(true)} onCreate={() => setCreateOpen(true)} />}
+      {!isChat && <OntologySidebar collapsed={ontologyCollapsed} onToggle={() => setOntologyCollapsed((value) => !value)} activeId={activeId} active={active} onOpenSwitcher={() => setSwitchOpen(true)} onCreate={() => setCreateOpen(true)} changeCount={changeCount} />}
       <main className="page-stage" aria-label={`${title[0]}：${title[1]}`}>
         {!isChat && !location.pathname.startsWith('/ontology/overview') && new URLSearchParams(location.search).get('guide') === '1' && <section className="modeling-next-step"><span>手动建模</span><div><b>{title[0]}</b><p>按表单保存后，返回工作台继续下一步；未保存的内容不会自动提交。</p></div><button className="bc-button" onClick={() => navigate(`/ontology/overview/${activeId}?guide=1`)}>返回工作台，继续下一步 <ChevronRight size={14} /></button></section>}
         {!isChat && new URLSearchParams(location.search).get('from_history') === '1' && <section className="history-return-bar"><span><History size={15} /> 正在查看变更记录关联的资源</span><button type="button" onClick={() => navigate(historyReturnUrl(location.search))}><ArrowLeft size={14} /> 返回这条变更记录</button></section>}
         <div className="studio-content">{!activeId && ontologies.length === 0 && !isChat && !location.pathname.startsWith('/ontology/build') ? <div className="welcome-empty"><Waypoints size={44} /><h2>从第一个本体开始</h2><p>创建业务语义空间，再定义对象、关系和业务动作。</p><button className="btn primary" onClick={() => setCreateOpen(true)}><Plus size={17} /> 新建本体</button></div> : <Routes>
           <Route path="/chat" element={<BuildChat {...pageProps} ontologies={ontologies} onCreate={() => setCreateOpen(true)} />} />
           <Route path="/ontology/all" element={<Navigate to="/ontology/overview" replace />} />
+          <Route path="/ontology/ai" element={<AssistantPage />} />
           <Route path="/ontology/overview" element={<OntologyWorkspace {...pageProps} ontologies={ontologies} onCreate={() => setCreateOpen(true)} />} />
           <Route path="/ontology/overview/:ontologyId" element={<OntologyWorkspace {...pageProps} ontologies={ontologies} onCreate={() => setCreateOpen(true)} />} />
           <Route path="/ontology/model/object-types" element={<ObjectTypes {...pageProps} />} />
@@ -278,5 +340,6 @@ export default function App() {
     {switchOpen && <OntologySwitchDialog ontologies={ontologies} activeId={activeId} onClose={() => setSwitchOpen(false)} onChoose={(id) => { chooseOntology(id); setSwitchOpen(false); }} onShowDirectory={() => { setSwitchOpen(false); navigate('/ontology/overview'); }} onCreate={() => { setSwitchOpen(false); setCreateOpen(true); }} />}
     {createOpen && <CreateOntologyWizard ontologies={ontologies} onClose={() => setCreateOpen(false)} onCreated={completeCreate} />}
     {modelingEntry && <ModelingEntry entry={modelingEntry} onClose={() => setModelingEntry(null)} onContinue={continueModeling} />}
-  </div></ModelingEntryContext.Provider>;
+    <AssistantDock />
+  </div></ModelingEntryContext.Provider></AssistantProvider>;
 }
