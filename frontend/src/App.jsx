@@ -77,7 +77,7 @@ const ONTOLOGY_NAV = [
   ] },
   { id: 'govern', label: '变更与发布', items: [
     { to: '/ontology/governance/quality', label: '本体质检', icon: ListChecks },
-    { to: '/ontology/governance/compare', label: '本体版本对比', icon: GitBranch },
+    { to: '/ontology/governance/compare', label: '本体对比', icon: GitBranch },
     { to: '/ontology/governance', label: '版本与发布', icon: Check },
     { to: '/ontology/governance/activity', label: '变更记录', icon: History },
     { to: '/ontology/governance/security', label: '权限策略', icon: ShieldCheck },
@@ -105,7 +105,7 @@ const TITLES = {
   '/ontology/governance': ['版本与发布', '评审当前变更并发布正式版本'],
   '/ontology/governance/activity': ['变更记录', '查看当前本体的资源操作历史'],
   '/ontology/governance/quality': ['本体质检', '在语义层建模后运行检查并形成报告'],
-  '/ontology/governance/compare': ['本体版本对比', '按发布快照对比语义模型变更'],
+  '/ontology/governance/compare': ['本体对比', '直接比较基线与副本，定位语义漂移'],
 };
 
 function PlatformSidebar({ collapsed, onToggle, onLogout }) {
@@ -198,6 +198,7 @@ export default function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const isChat = location.pathname === '/chat';
+  const isCompareWorkspace = location.pathname === '/ontology/governance/compare';
   const initialCompact = () => typeof window !== 'undefined' && window.innerWidth < 1500;
   const [mainCollapsed, setMainCollapsed] = useState(initialCompact);
   const [ontologyCollapsed, setOntologyCollapsed] = useState(initialCompact);
@@ -298,7 +299,7 @@ export default function App() {
   return <AssistantProvider activeId={activeId} active={active} notify={setMessage}><ModelingEntryContext.Provider value={entries}><div className={`platform-shell ${isChat ? 'chat-workspace' : ''} ${mainCollapsed ? 'main-collapsed' : ''} ${ontologyCollapsed ? 'ontology-collapsed' : ''}`}>
     <PlatformSidebar collapsed={mainCollapsed} onToggle={() => setMainCollapsed((value) => !value)} onLogout={() => setMessage('原型演示环境，暂不执行真实退出；账号入口已移到左下角。')} />
     <div className="workspace-area"><WorkspaceTabs /><div className="workspace-body">
-      {!isChat && <OntologySidebar collapsed={ontologyCollapsed} onToggle={() => setOntologyCollapsed((value) => !value)} activeId={activeId} active={active} onOpenSwitcher={() => setSwitchOpen(true)} onCreate={() => setCreateOpen(true)} changeCount={changeCount} />}
+      {!isChat && !isCompareWorkspace && <OntologySidebar collapsed={ontologyCollapsed} onToggle={() => setOntologyCollapsed((value) => !value)} activeId={activeId} active={active} onOpenSwitcher={() => setSwitchOpen(true)} onCreate={() => setCreateOpen(true)} changeCount={changeCount} />}
       <main className="page-stage" aria-label={`${title[0]}：${title[1]}`}>
         {!isChat && !location.pathname.startsWith('/ontology/overview') && new URLSearchParams(location.search).get('guide') === '1' && <section className="modeling-next-step"><span>手动建模</span><div><b>{title[0]}</b><p>按表单保存后，返回工作台继续下一步；未保存的内容不会自动提交。</p></div><button className="bc-button" onClick={() => navigate(`/ontology/overview/${activeId}?guide=1`)}>返回工作台，继续下一步 <ChevronRight size={14} /></button></section>}
         {!isChat && new URLSearchParams(location.search).get('from_history') === '1' && <section className="history-return-bar"><span><History size={15} /> 正在查看变更记录关联的资源</span><button type="button" onClick={() => navigate(historyReturnUrl(location.search))}><ArrowLeft size={14} /> 返回这条变更记录</button></section>}
