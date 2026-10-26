@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Bot, LoaderCircle, Scan, Send, User } from 'lucide-react';
+import { Bot, LoaderCircle, Paperclip, Scan, Send, User } from 'lucide-react';
 import { useAssistant } from './AssistantContext';
 import { RESOURCE_TYPE_LABELS, quickActions } from './selection';
 
@@ -24,6 +24,7 @@ export default function AssistantChat({ compact = false, showPicker = true }) {
       {messages.map((message, index) => <article key={index} className={`assistant-msg ${message.role}`}>
         <i className="assistant-avatar">{message.role === 'assistant' ? <Bot size={15} /> : <User size={15} />}</i>
         <div className={`assistant-bubble ${message.error ? 'error' : ''}`}>
+          {message.resources?.length > 0 && <div className="assistant-msg-resources"><small><Paperclip size={10} /> 随问题发送</small>{message.resources.map((item, resourceIndex) => <span key={`${item.type}-${item.id}-${resourceIndex}`}><i>{RESOURCE_TYPE_LABELS[item.type] || '资源'}</i><b title={item.parent ? `${item.label} · 所属 ${item.parent}` : item.label}>{item.label}</b></span>)}</div>}
           <p>{message.text}</p>
           {message.trace?.length > 0 && <details className="assistant-trace">
             <summary>本体工具轨迹 · {message.trace.length} 步</summary>

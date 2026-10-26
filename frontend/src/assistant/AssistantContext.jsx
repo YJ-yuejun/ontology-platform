@@ -149,12 +149,14 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     setSessionLabel('当前对话');
     const nextConversationId = conversationId || randomConversationId();
     if (!conversationId) setConversationId(nextConversationId);
+    const selection = itemsRef.current.map(({ key, ...rest }) => rest);
     setMessages((old) => [...old, {
       role: 'user', text,
-      resources: itemsRef.current.map(({ key, ...rest }) => rest),
+      resources: selection,
       thinking_mode: thinking, web_search: webSearch,
     }]);
     setInput('');
+    clear();
     setBusy(true);
     try {
       const result = await api(`/api/ontologies/${activeId}/agent/chat`, {
@@ -167,7 +169,7 @@ export function AssistantProvider({ activeId, active, notify, children }) {
             conversation_id: nextConversationId,
             thinking_mode: thinking,
             web_search: webSearch,
-            selection: itemsRef.current.map(({ key, ...rest }) => rest),
+            selection,
             scope: { route: location.pathname, title: document.title, ontology: active?.name },
           },
         }),
@@ -185,7 +187,7 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     } finally {
       setBusy(false);
     }
-  }, [active, activeId, busy, conversationId, input, location.pathname, notify, thinking, webSearch]);
+  }, [active, activeId, busy, clear, conversationId, input, location.pathname, notify, thinking, webSearch]);
 
   const replaceItems = useCallback((nextItems) => {
     pickedEls.current.forEach((element) => { element.dataset.aiPicked = 'false'; });
@@ -211,19 +213,17 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     const nextMessages = (conversation.messages || []).map((message) => message.role === 'assistant'
       ? { ...message, runMode: message.run_mode || message.runMode }
       : message);
-    const lastResources = [...nextMessages].reverse()
-      .find((message) => message.role === 'user' && message.resources?.length)?.resources || [];
     setConversationId(conversation.id);
     setMessages(nextMessages);
     setInput('');
     setThinking(false);
     setWebSearch(false);
-    replaceItems(lastResources);
+    clear();
     setPicking(false);
     setOpen(true);
     setHydrated(true);
     setSessionLabel('历史对话');
-  }, [replaceItems]);
+  }, [clear]);
 
   const openWith = useCallback((item, prompt = '') => {
     if (!item) return;

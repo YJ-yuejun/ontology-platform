@@ -451,3 +451,44 @@ body.ai-picking .vis-network, body.ai-picking .vis-network canvas { cursor: cros
   .assistant-panel-actions { gap: 0; }
   .assistant-panel-actions button { width: 27px; height: 27px; }
 }
+
+/* 已发送消息上的资源附件 */
+.assistant-msg-resources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 7px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid rgba(120, 146, 169, .18);
+}
+.assistant-msg-resources small {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #89a0b2;
+  font-size: 8px;
+}
+.assistant-msg.user .assistant-msg-resources small { color: rgba(255,255,255,.68); }
+.assistant-msg-resources > span {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  color: #46657c;
+  background: #f5f9fc;
+  border: 1px solid #dce8f0;
+  border-radius: 9px;
+  font-size: 9px;
+}
+.assistant-msg.user .assistant-msg-resources > span {
+  color: #fff;
+  background: rgba(255,255,255,.14);
+  border-color: rgba(255,255,255,.25);
+}
+.assistant-msg-resources i { color: #6f8ca2; font-size: 7.5px; font-style: normal; white-space: nowrap; }
+.assistant-msg.user .assistant-msg-resources i { color: rgba(255,255,255,.72); }
+.assistant-msg-resources b { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
