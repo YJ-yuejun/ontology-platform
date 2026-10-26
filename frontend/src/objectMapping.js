@@ -30,7 +30,9 @@ export function governanceFieldCandidates(fields = []) {
 }
 
 export const isConfirmedMapping = (mapping) => {
-  if (mapping.binding_mode !== 'governed') return false;
+  // v2 页面暂时移除了治理资产层：direct 也是有效映射来源。
+  // 仅未知的绑定模式（如历史 physical 占位）仍视为未确认。
+  if (mapping.binding_mode && !['governed', 'direct'].includes(mapping.binding_mode)) return false;
   if (mapping.design_status != null && String(mapping.design_status).trim()) {
     return ['已确认', 'validated', 'confirmed'].includes(mapping.design_status);
   }

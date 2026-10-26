@@ -63,7 +63,7 @@ export function PropertyQuickEditor({ activeId, owner, ownerKind, propertyKey, n
     <form id="property-quick-form" className="form-sections" onSubmit={save}><section className="form-section">
       <div className="form-grid two">
         <label><span>属性名称</span><input autoFocus required value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="例如：合同金额" /></label>
-        <label><span>属性字段名称</span><input className="mono" required value={form.key || ''} onChange={(e) => setForm({ ...form, key: e.target.value })} placeholder="contract_amount" />{renamed && affectedMappings.length > 0 ? <small className="field-error">该字段已有 {affectedMappings.length} 条属性映射，改名后映射会失效，需要到“数据源与映射”重新绑定。</small> : <small>供接口和映射稳定引用，改名会影响已建立的映射。</small>}</label>
+        <label><span>属性字段名称</span><input className="mono" required value={form.key || ''} onChange={(e) => setForm({ ...form, key: e.target.value })} placeholder="contract_amount" />{renamed && affectedMappings.length > 0 ? <small className="field-error">该字段已有 {affectedMappings.length} 条属性映射，改名后映射会失效，需要到“数据映射”重新绑定。</small> : <small>供接口和映射稳定引用，改名会影响已建立的映射。</small>}</label>
         <DictionaryField kind="data_type" label="数据类型" value={form.type || 'string'} valueMode="code" onChange={(next) => setForm({ ...form, type: next, options: next === 'enum' ? (form.options || []) : null })} />
         {ownerKind === 'object' && <label><span>属性类别</span><select value={form.property_category || '业务属性'} onChange={(e) => setForm({ ...form, property_category: e.target.value })}>{PROPERTY_CATEGORIES.map((category) => <option key={category}>{category}</option>)}</select></label>}
         {form.type === 'enum' && <label><span>枚举值</span><input value={(form.options || []).join(',')} onChange={(e) => setForm({ ...form, options: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} placeholder="在用, 闲置, 已报废" /></label>}
@@ -109,7 +109,7 @@ export function PropertyRemoveDialog({ activeId, owner, ownerKind, propertyKey, 
       {error && <div className="form-error-banner" role="alert">{error}</div>}
       {blocked ? <div className="remove-block"><b>主键属性不能删除</b><p>对象必须且只能有一个主键。如需更换，请先在另一项属性上勾选“主键”，再删除这一项。</p></div> : <>
         <p>将从{ownerKind === 'object' ? '对象' : '关系'}“{owner.display_name}”中删除属性 <b>{property.name}</b>（<code>{property.key}</code>），只影响当前工作状态。</p>
-        {affected.length > 0 && <div className="remove-block"><b>该属性有 {affected.length} 条属性映射</b><p>删除后这些映射会失效，需要到“数据源与映射”中清理。</p></div>}
+        {affected.length > 0 && <div className="remove-block"><b>该属性有 {affected.length} 条属性映射</b><p>删除后这些映射会失效，需要到“数据映射”中清理。</p></div>}
         {ownerKind === 'object' && (owner.title_property === property.key || owner.state_property === property.key) && <p className="template-field-note">它当前是对象的{owner.title_property === property.key ? '标题属性' : '状态属性'}，删除后会改为默认值。</p>}
       </>}
     </div>

@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Download, KeyRound, Network, Pencil, Search, Star } from 'lucide-react';
+import { AlertTriangle, Download, KeyRound, Network, Pencil, Plus, Search, Sparkles, Star, X } from 'lucide-react';
 import { api } from '../api';
 import { dataTypeLabel } from '../labels';
 import { ObjectTypeIcon } from '../components/ObjectTypeIcon';
 import ObjectTypeEditor from '../components/ObjectTypeEditor';
+import PropertyCreateDialog from '../components/PropertyCreateDialog';
 import { EmptyState, ErrorState, Loading } from '../components/StateViews';
 import PaginationBar from '../components/PaginationBar';
 import { flattenProperties, MAPPING_STATUS_LABELS, propertyPeers } from '../propertyCatalog';
+import { useAssistant } from '../assistant/AssistantContext';
+import useDetailPanel from '../hooks/useDetailPanel';
 
 const CONSTRAINTS = [['primary', '主键'], ['required', '必填'], ['unique', '唯一'], ['searchable', '可搜索']];
 const hasConstraint = (property, key) => ({ primary: property.is_primary_key, required: property.is_required, unique: property.is_unique, searchable: property.is_searchable })[key];
@@ -31,6 +34,9 @@ export default function ObjectProperties({ activeId, active, refreshOntologies, 
   const [pageSize, setPageSize] = useState(50);
   const [selectedId, setSelectedId] = useState('');
   const [editing, setEditing] = useState(null);
+  const [addProperty, setAddProperty] = useState(null);
+  const assistant = useAssistant();
+  const { detailOpen, openDetail, closeDetail } = useDetailPanel();
 
   const load = async () => {
     setError('');
@@ -63,7 +69,7 @@ export default function ObjectProperties({ activeId, active, refreshOntologies, 
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pages);
   const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-  const selected = filtered.find((row) => row.id === selectedId) || pageRows[0] || null;
+  const selected = filtered.find((row) => row.id === selectedId) || null;
   const peers = selected ? propertyPeers(rows, selected) : [];
   const stats = useMemo(() => ({
     total: rows.length,
@@ -83,6 +89,15 @@ export default function ObjectProperties({ activeId, active, refreshOntologies, 
     URL.revokeObjectURL(href);
   };
   const onSaved = async () => { setEditing(null); await load(); refreshOntologies(activeId); notify('对象类型已保存到工作状态'); };
+  const onPropertySaved = async (objectId, key) => {
+    setAddProperty(null);
+    await load();
+    refreshOntologies(activeId);
+    reset();
+    setSelectedId(`${objectId}:${key}`);
+    openDetail();
+    notify('对象属性已新增到工作状态');
+  };
 
   if (error) return <ErrorState message={error} onRetry={load} />;
   if (!objects) return <Loading />;
@@ -103,10 +118,10 @@ export default function ObjectProperties({ activeId, active, refreshOntologies, 
       <span>显示 {filtered.length} / 共 {rows.length} 项</span>
       <button type="button" className="oma-secondary" disabled={!filtered.length} onClick={exportCsv}><Download size={14} /> 导出</button>
     </section>
-    <div className="oma-resource-layout"><section className="oma-resource-list"><header><strong>对象属性目录</strong><span>汇总全部对象类型的属性；属性仍在所属对象内定义，修改请编辑对象</span></header>
+    <div className={`oma-resource-layout ${detailOpen ? 'detail-open' : 'detail-collapsed'}`}><section className="oma-resource-list"><header><strong>对象属性目录</strong><span>汇总全部对象类型的属性；可在此新增属性，修改仍请编辑所属对象</span><button type="button" className="oma-button property-add-button" onClick={() => setAddProperty({ defaultObjectId: selected?.object.id || '' })}><Plus size={14} /> 新增属性</button></header>
       {!filtered.length ? <EmptyState title={rows.length ? '没有匹配的属性' : '暂无对象属性'} description={rows.length ? '调整筛选条件后再试。' : '创建对象类型并定义属性后，会在这里汇总展示。'} action={filtering ? <button className="oma-secondary" onClick={reset}>清空筛选</button> : null} /> : <div className="property-catalog-table">
         <div className="property-catalog-head"><span>属性名称</span><span>字段名称</span><span>数据类型</span><span>属性类别</span><span>所属对象</span><span>约束</span><span>映射状态</span></div>
-        {pageRows.map((row) => { const { object, property } = row; return <button type="button" key={row.id} className={selected?.id === row.id ? 'selected' : ''} onClick={() => setSelectedId(row.id)} onDoubleClick={() => setEditing(object)}>
+        {pageRows.map((row) => { const { object, property } = row; return <button type="button" key={row.id} className={selected?.id === row.id ? 'selected' : ''} onClick={() => { setSelectedId(row.id); openDetail(); }} onDoubleClick={() => setEditing(object)} data-ai-resource={JSON.stringify({ type: 'attribute', id: `${object.id}:${property.key}`, label: property.name, parent: object.display_name, detail: { objectId: object.id, key: property.key, dataType: dataTypeLabel(property.type), mapping: row.mapping } })}>
           <span className="property-catalog-name"><b>{property.name}</b>{property.is_primary_key && <KeyRound size={12} aria-label="主键" />}</span>
           <code>{property.key}{row.sharedCount > 1 && <em className={row.typeConflict ? 'conflict' : ''} title={row.typeConflict ? '同名字段在其他对象中数据类型不同' : `${row.sharedCount} 个对象使用该字段`}>{row.typeConflict && <AlertTriangle size={10} />}×{row.sharedCount}</em>}</code>
           <span>{dataTypeLabel(property.type)}{property.type === 'enum' && property.options?.length ? <small> · {property.options.length} 项</small> : null}</span>
@@ -119,7 +134,7 @@ export default function ObjectProperties({ activeId, active, refreshOntologies, 
       <PaginationBar page={currentPage} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
     </section>
     <aside className="oma-resource-inspector">{selected ? <>
-      <header><span>属性详情</span><div><button onClick={() => navigate(`/ontology/graph?focus=${selected.object.id}`)} title="在本体图谱中定位所属对象"><Network size={14} /> 图谱</button><button onClick={() => setEditing(selected.object)}><Pencil size={14} /> 编辑所属对象</button></div></header>
+      <header><span>属性详情</span><div><button onClick={() => assistant.openWith({ type: 'attribute', id: `${selected.object.id}:${selected.property.key}`, label: selected.property.name, parent: selected.object.display_name, detail: { objectId: selected.object.id, key: selected.property.key } })} title="把该属性交给本体智能"><Sparkles size={14} /> 问 AI</button><button onClick={() => navigate(`/ontology/graph?focus=${selected.object.id}`)} title="在本体图谱中定位所属对象"><Network size={14} /> 图谱</button><button onClick={() => setEditing(selected.object)}><Pencil size={14} /> 编辑所属对象</button></div><button className="detail-close-btn" title="收起详情" aria-label="收起详情" onClick={closeDetail}><X size={14} /></button></header>
       <div className="oma-inspector-title"><i><KeyRound size={16} /></i><div><h3>{selected.property.name}</h3><code>{selected.property.key}</code></div></div>
       <p>{selected.property.description || selected.property.business_definition || '尚未填写业务定义。'}</p>
       <dl>{[
@@ -138,5 +153,6 @@ export default function ObjectProperties({ activeId, active, refreshOntologies, 
       <div className="oma-interface-props"><strong>同名字段 · {peers.length ? `另有 ${peers.length} 个对象使用` : '仅此对象使用'}</strong>{peers.map((peer) => <div key={peer.id}><span>{peer.object.display_name}{peer.property.type !== selected.property.type && <em className="conflict">类型不同</em>}</span><code>{peer.property.name} · {dataTypeLabel(peer.property.type)}</code></div>)}{!peers.length && <p className="form-hint">该字段名没有在其他对象中出现。</p>}</div>
     </> : <EmptyState title="请选择属性" description="从左侧目录查看属性定义与使用情况。" />}</aside></div>
     {editing && <ObjectTypeEditor activeId={activeId} editing={editing} notify={notify} onClose={() => setEditing(null)} onSaved={onSaved} />}
+    {addProperty && <PropertyCreateDialog objects={objects} activeId={activeId} defaultObjectId={addProperty.defaultObjectId} notify={notify} onClose={() => setAddProperty(null)} onSaved={onPropertySaved} />}
   </div>;
 }

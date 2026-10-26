@@ -4,7 +4,7 @@ import { api } from '../api';
 import { USAGE_STATUS_OPTIONS } from '../labels';
 import Modal from './Modal';
 
-// 图谱检查器里编辑主题域。编码是稳定引用，创建后不可修改，与“业务域与主题域”页口径一致。
+// 图谱检查器里编辑主题域。编码是稳定引用，创建后不可修改，与“业务主题”页口径一致。
 export function SubjectDomainQuickEditor({ activeId, subject, notify, onClose, onSaved }) {
   const [domains, setDomains] = useState([]);
   const [form, setForm] = useState({ business_domain_id: subject.business_domain_id, code: subject.code, name: subject.name, description: subject.description || '', owner: subject.owner || '', status: subject.status });

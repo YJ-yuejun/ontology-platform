@@ -498,6 +498,28 @@ class OntologyApiTests(unittest.TestCase):
         result = self.request("POST", f"/api/ontologies/{oid}/enterprise/data-mappings/{saved['id']}/validate")
         self.assertFalse(any(item["level"] == "error" for item in result["checks"]))
 
+    def test_procurement_mapping_demo_covers_multiple_domains_and_direct_field_links(self):
+        oid = self.procurement["id"]
+        objects = self.request("GET", f"/api/ontologies/{oid}/object-types")
+        domains = self.request("GET", f"/api/ontologies/{oid}/business-domains")
+        subjects = self.request("GET", f"/api/ontologies/{oid}/subject-domains")
+        sources = self.request("GET", f"/api/ontologies/{oid}/enterprise/data-sources")
+        mappings = self.request("GET", f"/api/ontologies/{oid}/enterprise/data-mappings")
+        self.assertGreaterEqual(len(objects), 30)
+        self.assertEqual(len(domains), 2)
+        self.assertGreaterEqual(len(subjects), 6)
+        self.assertLessEqual(len(subjects), 6)
+        self.assertGreaterEqual(len(sources), 10)
+        direct = [item for item in mappings if item.get("binding_mode") == "direct"]
+        self.assertGreaterEqual(len(direct), 30)
+        sample = next(item for item in direct if item.get("mapping_type") == "property"
+                      and item.get("source_table") and item.get("source_field"))
+        self.assertTrue(sample["source_code"])
+        self.assertTrue(sample["target_object_type"])
+        self.assertTrue(sample["target_property"])
+        object_record = next(item for item in objects if item["name"] == sample["target_object_type"])
+        self.assertIn(sample["target_property"], {item["key"] for item in object_record["properties"]})
+
     def test_mapping_editor_preserves_template_semantics_and_checks_endpoint_roles(self):
         oid = self.pipeline["id"]
         mappings = self.request("GET", f"/api/ontologies/{oid}/enterprise/data-mappings")
@@ -1002,5 +1024,24 @@ class OntologyApiTests(unittest.TestCase):
         self.assertTrue(any(row["change"] == "removed" and row["name"] == "采购订单" for row in diff["rows"]))
 
 
+    def test_agent_history_groups_messages_by_conversation(self):
+        ontology_id = self.procurement["id"]
+        conversation_id = "test-agent-history-conversation"
+        for message in ("这个本体包含哪些核心业务对象？", "采购付款为什么需要人工复核？"):
+            result = self.request("POST", f"/api/ontologies/{ontology_id}/agent/chat", json={
+                "message": message,
+                "context": {"conversation_id": conversation_id, "thinking_mode": True},
+            })
+            self.assertEqual(result["conversation_id"], conversation_id)
+        history = self.request("GET", f"/api/ontologies/{ontology_id}/agent/history?limit=20")
+        conversation = next(item for item in history["conversations"] if item["id"] == conversation_id)
+        self.assertEqual(conversation["title"], "这个本体包含哪些核心业务对象？")
+        self.assertEqual(conversation["message_count"], 4)
+        self.assertEqual(conversation["messages"][0]["role"], "user")
+        self.assertTrue(conversation["messages"][0]["thinking_mode"])
+        self.assertEqual(conversation["messages"][1]["role"], "assistant")
+
+
 if __name__ == "__main__":
     unittest.main()
+

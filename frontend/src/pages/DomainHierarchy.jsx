@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Building2, ChevronRight, Layers3, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { Building2, ChevronRight, Layers3, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api, formatTime } from '../api';
 import { usageStatusLabel, USAGE_STATUS_OPTIONS } from '../labels';
@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, Loading } from '../components/StateViews';
 import { ObjectTypeIcon } from '../components/ObjectTypeIcon';
 import PaginationBar from '../components/PaginationBar';
 import useCreateIntent from '../hooks/useCreateIntent';
+import useDetailPanel from '../hooks/useDetailPanel';
 
 const emptyDomain = { code: '', name: '', description: '', owner: '', status: 'active' };
 const emptySubject = { business_domain_id: '', code: '', name: '', description: '', owner: '', status: 'active' };
@@ -30,6 +31,7 @@ export default function DomainHierarchy({ activeId, refreshOntologies, notify })
   const [scenarios, setScenarios] = useState([]);
   const [selectedDomainId, setSelectedDomainId] = useState('');
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
+  const { detailOpen, openDetail, closeDetail } = useDetailPanel();
   const [query, setQuery] = useState('');
   const [domainPage, setDomainPage] = useState(1);
   const [subjectPage, setSubjectPage] = useState(1);
@@ -62,8 +64,8 @@ export default function DomainHierarchy({ activeId, refreshOntologies, notify })
       const domainId = preferredDomainId || focusedSubject?.business_domain_id || (domainRows.some((item) => item.id === selectedDomainId) ? selectedDomainId : domainRows[0]?.id || '');
       setSelectedDomainId(domainId);
       const domainSubjects = subjectRows.filter((item) => item.business_domain_id === domainId);
-      setSelectedSubjectId(preferredSubjectId && domainSubjects.some((item) => item.id === preferredSubjectId)
-        ? preferredSubjectId : domainSubjects.some((item) => item.id === selectedSubjectId) ? selectedSubjectId : domainSubjects[0]?.id || '');
+      setSelectedSubjectId(preferredSubjectId && domainSubjects.some((item) => item.id === preferredSubjectId) ? preferredSubjectId : '');
+      if (preferredSubjectId) openDetail();
     } catch (cause) { setError(cause.message); }
   };
   useEffect(() => { setDomains(null); setSelectedDomainId(''); setSelectedSubjectId(''); load(historyType === 'business_domain' || historyType === '业务域' ? historyId : undefined, historyType === 'subject_domain' || historyType === '主题域' ? historyId : undefined); }, [activeId, historyType, historyId]);
@@ -102,7 +104,8 @@ export default function DomainHierarchy({ activeId, refreshOntologies, notify })
 
   const selectDomain = (domainId) => {
     setSelectedDomainId(domainId);
-    setSelectedSubjectId(subjects.find((item) => item.business_domain_id === domainId)?.id || '');
+    setSelectedSubjectId('');
+    closeDetail();
   };
   const beginDomain = (item = null) => {
     setEditor({ kind: 'domain', item });
@@ -144,7 +147,7 @@ export default function DomainHierarchy({ activeId, refreshOntologies, notify })
   if (error) return <ErrorState message={error} onRetry={() => load()} />;
   if (!domains) return <Loading />;
   return <div className="domain-page domain-page-v2">
-    <div className="domain-layout domain-layout-v2">
+    <div className={`domain-layout domain-layout-v2 ${detailOpen ? 'detail-open' : 'detail-collapsed'}`}>
       <section className="domain-list">
         <header><div><strong>业务域</strong><span>{domains.length} 个治理边界</span></div><button className="domain-add-button" onClick={() => beginDomain()} title="新建业务域"><Plus size={15} /> 新建</button></header>
         <label><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称、编码或负责人" /></label>
@@ -154,11 +157,11 @@ export default function DomainHierarchy({ activeId, refreshOntologies, notify })
 
       <section className="subject-list-panel">
         <header><div><strong>{selectedDomain?.name || '主题域'}</strong><span>{selectedDomain ? `${selectedSubjects.length} 个主题域` : '请先选择业务域'}</span></div>{selectedDomain && <div><button className="oma-button" onClick={() => beginSubject()}><Plus size={14} /> 新建主题域</button></div>}</header>
-        {selectedSubjects.length ? <><div className="subject-table"><div className="subject-table-head"><span>主题域</span><span>对象类型</span><span>负责人</span><span>状态</span></div>{subjectRows.map((item) => <button key={item.id} className={selectedSubjectId === item.id ? 'selected' : ''} onClick={() => setSelectedSubjectId(item.id)}><span className="subject-name-cell"><i><Layers3 size={15} /></i><span><b>{item.name}</b><code>{item.code}</code></span></span><span>{item.object_count} 个</span><span>{item.owner || '未设置'}</span><span><em className={`oma-status ${item.status}`}>{usageStatusLabel(item.status)}</em></span></button>)}</div><PaginationBar page={currentSubjectPage} pageSize={pageSize} total={selectedSubjects.length} onPageChange={setSubjectPage} onPageSizeChange={(size) => { setPageSize(size); setDomainPage(1); setSubjectPage(1); }} /></> : selectedDomain ? <EmptyState title="该业务域还没有主题域" description="主题域用于直接组织对象类型。" action={<button className="oma-button" onClick={() => beginSubject()}><Plus size={15} /> 新建主题域</button>} /> : <EmptyState title="请选择业务域" description="从左侧选择业务域查看主题域。" />}
+        {selectedSubjects.length ? <><div className="subject-table"><div className="subject-table-head"><span>主题域</span><span>对象类型</span><span>负责人</span><span>状态</span></div>{subjectRows.map((item) => <button key={item.id} className={selectedSubjectId === item.id ? 'selected' : ''} onClick={() => { setSelectedSubjectId(item.id); openDetail(); }}><span className="subject-name-cell"><i><Layers3 size={15} /></i><span><b>{item.name}</b><code>{item.code}</code></span></span><span>{item.object_count} 个</span><span>{item.owner || '未设置'}</span><span><em className={`oma-status ${item.status}`}>{usageStatusLabel(item.status)}</em></span></button>)}</div><PaginationBar page={currentSubjectPage} pageSize={pageSize} total={selectedSubjects.length} onPageChange={setSubjectPage} onPageSizeChange={(size) => { setPageSize(size); setDomainPage(1); setSubjectPage(1); }} /></> : selectedDomain ? <EmptyState title="该业务域还没有主题域" description="主题域用于直接组织对象类型。" action={<button className="oma-button" onClick={() => beginSubject()}><Plus size={15} /> 新建主题域</button>} /> : <EmptyState title="请选择业务域" description="从左侧选择业务域查看主题域。" />}
       </section>
 
       <aside className="subject-inspector">
-        <header><strong>主题域详情</strong>{selectedSubject && <div><ResourceHistoryLink resourceType="subject_domain" resourceId={selectedSubject.id} /><button onClick={() => beginSubject(selectedSubject)} title={`编辑${selectedSubject.name}`}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove('subject', selectedSubject)} title={`删除${selectedSubject.name}并移除对象分类`}><Trash2 size={14} /> 删除</button></div>}</header>
+        <header><strong>主题域详情</strong>{selectedSubject && <div><ResourceHistoryLink resourceType="subject_domain" resourceId={selectedSubject.id} /><button onClick={() => beginSubject(selectedSubject)} title={`编辑${selectedSubject.name}`}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove('subject', selectedSubject)} title={`删除${selectedSubject.name}并移除对象分类`}><Trash2 size={14} /> 删除</button></div>}<button className="detail-close-btn" title="收起详情" aria-label="收起详情" onClick={closeDetail}><X size={14} /></button></header>
         {selectedSubject ? <div className="subject-inspector-body"><div className="subject-title"><i><Layers3 size={18} /></i><div><h3>{selectedSubject.name}</h3><code>{selectedSubject.code}</code></div></div><p>{selectedSubject.description || '尚未填写主题域说明。'}</p>
           <dl><div><dt>所属业务域</dt><dd>{selectedDomain?.name || '—'}</dd></div><div><dt>负责人</dt><dd>{selectedSubject.owner || '未设置'}</dd></div><div><dt>使用状态</dt><dd><em className={`oma-status ${selectedSubject.status}`}>{usageStatusLabel(selectedSubject.status)}</em></dd></div><div><dt>对象类型</dt><dd>{subjectObjects.length} 个</dd></div><div><dt>最近修改</dt><dd>{formatTime(selectedSubject.updated_at)}</dd></div></dl>
           <section className="subject-detail-section"><header><strong>下属对象类型</strong><span>{subjectObjects.length}</span></header>{subjectObjects.length ? <div>{subjectObjects.map((object) => <button key={object.id} onClick={() => navigate('/ontology/model/object-types')}><i><ObjectTypeIcon value={object.icon} size={13} /></i><span><b>{object.display_name}</b><code>{object.name}</code></span><em>{object.properties.length} 项属性</em><ChevronRight size={13} /></button>)}</div> : <p>尚未归类对象。</p>}</section>

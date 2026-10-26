@@ -8,7 +8,7 @@ import { X } from 'lucide-react';
 //     双击的第二下 mousedown 会在弹窗刚打开的瞬间把它关掉（曾被反馈为“闪退”）。
 const MIN_OPEN_MS_BEFORE_BACKDROP_CLOSE = 300;
 
-export default function Modal({ title, subtitle, children, onClose, footer, wide = false, closeOnBackdrop = true }) {
+export default function Modal({ title, subtitle, children, onClose, footer, wide = false, extraWide = false, closeOnBackdrop = true }) {
   const dialogRef = useRef(null);
   const closeRef = useRef(onClose);
   const backdropPressed = useRef(false);
@@ -44,7 +44,7 @@ export default function Modal({ title, subtitle, children, onClose, footer, wide
   };
   return (
     <div className="modal-backdrop" onMouseDown={onBackdropMouseDown} onClick={onBackdropClick}>
-      <section ref={dialogRef} tabIndex={-1} className={`modal ${wide ? 'modal-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <section ref={dialogRef} tabIndex={-1} className={`modal ${wide ? 'modal-wide' : ''} ${extraWide ? 'modal-extra-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <header className="modal-header">
           <div>
             <h2 id={titleId}>{title}</h2>

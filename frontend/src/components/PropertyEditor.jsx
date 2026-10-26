@@ -19,21 +19,28 @@ export const emptyProperty = () => ({
 });
 
 export default function PropertyEditor({
-  value, onChange, primaryKey = true, label = '属性定义', templateMode = false,
+  value, onChange, primaryKey = true, label = '属性定义', templateMode = false, compact = false,
 }) {
   const update = (index, patch) => onChange(value.map((item, i) => i === index ? { ...item, ...patch } : item));
   const remove = (index) => onChange(value.filter((_, i) => i !== index));
-  const add = () => onChange([...value, emptyProperty()]);
+  const add = () => {
+    const item = emptyProperty();
+    // 新建对象时第一项属性默认作为主键，减少一次必选操作；用户仍可改选其他属性。
+    if (primaryKey && !value.some((entry) => entry.is_primary_key)) item.is_primary_key = true;
+    onChange([...value, item]);
+  };
 
   return (
     <div className="property-editor">
-      <div className="section-row">
-        <div>
-          <h3>{label}</h3>
-          <p>{templateMode ? '按模板的对象属性字段填写；物理接入仍以“数据源与映射”为准。' : '用稳定英文标识描述字段，用中文名称服务业务用户。'}</p>
-        </div>
-        <button type="button" className="btn secondary small" onClick={add}><Plus size={15} /> 添加一项</button>
-      </div>
+      {compact
+        ? <div className="section-row compact"><h3>属性字段</h3><button type="button" className="btn secondary small" onClick={add}><Plus size={15} /> 添加一项</button></div>
+        : <div className="section-row">
+          <div>
+            <h3>{label}</h3>
+            <p>{templateMode ? '按模板的对象属性字段填写；物理接入仍以“数据映射”为准。' : '用稳定英文标识描述字段，用中文名称服务业务用户。'}</p>
+          </div>
+          <button type="button" className="btn secondary small" onClick={add}><Plus size={15} /> 添加一项</button>
+        </div>}
       {value.length === 0 ? (
         <button type="button" className="empty-properties" onClick={add}>暂无定义，点击添加</button>
       ) : (

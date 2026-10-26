@@ -1,4 +1,4 @@
-import { changeMappingType, isDirectMapping, mappingSourceKind, relationDefaultKey, resetMappingSource, selectMappingRelation, setMappingSourceField, sourceKindForLocation, sourceLocationLabel } from '../mappingForm';
+import { changeMappingType, isDirectMapping, mappingSourceKind, relationDefaultKey, resetMappingSource, setMappingSourceField, sourceKindForLocation, sourceLocationLabel } from '../mappingForm';
 
 export function MappingTargetFields({ form, setForm, objects, links }) {
   const object = objects.find((item) => item.name === form.target_object_type);
@@ -6,9 +6,9 @@ export function MappingTargetFields({ form, setForm, objects, links }) {
     <label><span>映射类型</span><select value={form.mapping_type} onChange={(event) => setForm((old) => changeMappingType(old, event.target.value))}><option value="property">属性映射</option><option value="relation">关系映射</option></select></label>
     <span className="form-grid-spacer" aria-hidden="true" />
     {form.mapping_type === 'property' ? <>
-      <label><span>本体对象</span><select required value={form.target_object_type || ''} onChange={(event) => setForm((old) => resetMappingSource(old, { target_object_type: event.target.value, target_property: '' }))}><option value="">请选择对象</option>{objects.map((item) => <option value={item.name} key={item.id}>{item.display_name}</option>)}</select></label>
-      <label><span>本体属性</span><select required disabled={!object} value={form.target_property || ''} onChange={(event) => setForm((old) => ({ ...resetMappingSource(old, { target_property: event.target.value }), source_key: old.source_key }))}><option value="">{object ? '请选择属性' : '请先选择本体对象'}</option>{(object?.properties || []).map((item) => <option value={item.key} key={item.key}>{item.name} · {item.key}</option>)}</select></label>
-    </> : <><label><span>本体关系</span><select required value={form.target_relation || ''} onChange={(event) => setForm((old) => selectMappingRelation(old, links.find((item) => item.name === event.target.value)))}><option value="">请选择关系</option>{links.map((item) => {
+      <label><span>本体对象</span><select required value={form.target_object_type || ''} onChange={(event) => setForm((old) => ({ ...old, target_object_type: event.target.value, target_property: '' }))}><option value="">请选择对象</option>{objects.map((item) => <option value={item.name} key={item.id}>{item.display_name}</option>)}</select></label>
+      <label><span>本体属性</span><select required disabled={!object} value={form.target_property || ''} onChange={(event) => setForm((old) => ({ ...old, target_property: event.target.value }))}><option value="">{object ? '请选择属性' : '请先选择本体对象'}</option>{(object?.properties || []).map((item) => <option value={item.key} key={item.key}>{item.name} · {item.key}</option>)}</select></label>
+    </> : <><label><span>本体关系</span><select required value={form.target_relation || ''} onChange={(event) => { const name = event.target.value; const relation = links.find((item) => item.name === name); setForm((old) => ({ ...old, target_relation: name, target_object_type: '', target_property: '', map_way: 'link', source_key: relationDefaultKey(relation) || old.source_key })); }}><option value="">请选择关系</option>{links.map((item) => {
       const start = objects.find((entry) => entry.id === item.source_object_type_id)?.display_name;
       const end = objects.find((entry) => entry.id === item.target_object_type_id)?.display_name;
       return <option value={item.name} key={item.id}>{start} → {item.display_name} → {end}</option>;

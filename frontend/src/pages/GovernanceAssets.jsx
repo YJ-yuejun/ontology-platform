@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { CheckCircle2, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { api } from '../api';
 import Modal from '../components/Modal';
 import ResourceHistoryLink from '../components/ResourceHistoryLink';
 import useHistoryResourceFocus from '../hooks/useHistoryResourceFocus';
 import PaginationBar from '../components/PaginationBar';
 import { EmptyState } from '../components/StateViews';
+import useDetailPanel from '../hooks/useDetailPanel';
 
 const blank = () => ({ code: '', name: '', description: '', asset_kind: '数据实体', catalog_origin: 'enterprise_catalog',
   verification_status: 'candidate', governance_subject: '', asset_version: '', upstream_source_code: '', upstream_object: '',
@@ -16,6 +17,7 @@ export default function GovernanceAssets({ activeId, assets, sources, reload, no
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [selectedId, setSelectedId] = useState('');
+  const { detailOpen, openDetail, closeDetail } = useDetailPanel();
   const [editor, setEditor] = useState(null);
   const [form, setForm] = useState(blank());
   const [schema, setSchema] = useState(null);
@@ -23,9 +25,9 @@ export default function GovernanceAssets({ activeId, assets, sources, reload, no
   const filtered = useMemo(() => assets.filter((item) => `${item.code} ${item.name} ${item.governance_subject || ''} ${item.upstream_object || ''} ${item.upstream_source_code || ''}`.toLowerCase().includes(query.toLowerCase())), [assets, query]);
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const rows = filtered.slice((Math.min(page, pages) - 1) * pageSize, Math.min(page, pages) * pageSize);
-  const selected = assets.find((item) => item.id === selectedId) || rows[0];
+  const selected = assets.find((item) => item.id === selectedId) || null;
   useEffect(() => { setPage(1); }, [query, pageSize]);
-  useHistoryResourceFocus({ resourceTypes: ['governance_asset'], items: assets, visible: filtered, pageSize, setPage, onSelect: (item) => setSelectedId(item.id), ready: Boolean(sources) });
+  useHistoryResourceFocus({ resourceTypes: ['governance_asset'], items: assets, visible: filtered, pageSize, setPage, onSelect: (item) => { setSelectedId(item.id); openDetail(); }, ready: Boolean(sources) });
   useEffect(() => {
     if (!seed) return;
     setEditor({});
@@ -66,7 +68,7 @@ export default function GovernanceAssets({ activeId, assets, sources, reload, no
       const path = editor.id ? `/api/ontologies/${activeId}/enterprise/governance-assets/${editor.id}` : `/api/ontologies/${activeId}/enterprise/governance-assets`;
       const saved = await api(path, { method: editor.id ? 'PUT' : 'POST', body: JSON.stringify({ code: form.code.trim(), name: form.name.trim(),
         description: form.description.trim(), category: form.asset_kind, status: form.verification_status === 'confirmed' ? 'active' : 'draft', payload }) });
-      setEditor(null); setSelectedId(saved.id); await reload(); notify('治理资产元数据已保存；确认状态不代表与数据中台已建立运行连接。');
+      setEditor(null); setSelectedId(saved.id); openDetail(); await reload(); notify('治理资产元数据已保存；确认状态不代表与数据中台已建立运行连接。');
     } catch (cause) { notify(cause.message); } finally { setBusy(false); }
   };
   const remove = async (item) => {
@@ -76,12 +78,12 @@ export default function GovernanceAssets({ activeId, assets, sources, reload, no
   };
   return <>
     <div className="mapping-controls"><label><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索治理资产名称、编码或主题" /></label><span className="mapping-layer-hint">治理目录资产是语义映射的唯一新建入口；物理来源仅作上游血缘。</span><button onClick={() => open()}><Plus size={15} /> 登记治理资产</button></div>
-    <div className="mapping-v2-layout"><div className="mapping-v2-list-pane"><div className="mapping-v2-pane-heading"><strong>治理资产目录</strong><span>候选资产需人工确认后才可用于语义映射</span></div>
+    <div className={`mapping-v2-layout ${detailOpen ? 'detail-open' : 'detail-collapsed'}`}><div className="mapping-v2-list-pane"><div className="mapping-v2-pane-heading"><strong>治理资产目录</strong><span>候选资产需人工确认后才可用于语义映射</span></div>
       <section className="mapping-v2-table governance-list"><header><span>资产名称／编码</span><span>资产类型</span><span>治理主题</span><span>字段数</span><span>状态</span></header>
-        {rows.map((item) => <button type="button" key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => setSelectedId(item.id)}><span><strong>{item.name}</strong><small>{item.code}</small></span><span>{item.asset_kind || '—'}</span><span>{item.governance_subject || '—'}</span><span>{item.fields?.length || 0}</span><span className={`mapping-status ${item.verification_status === 'confirmed' ? 'confirmed' : ''}`}>{item.verification_status === 'confirmed' ? '已确认' : '待确认'}</span></button>)}
+        {rows.map((item) => <button type="button" key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => { setSelectedId(item.id); openDetail(); }}><span><strong>{item.name}</strong><small>{item.code}</small></span><span>{item.asset_kind || '—'}</span><span>{item.governance_subject || '—'}</span><span>{item.fields?.length || 0}</span><span className={`mapping-status ${item.verification_status === 'confirmed' ? 'confirmed' : ''}`}>{item.verification_status === 'confirmed' ? '已确认' : '待确认'}</span></button>)}
         {!rows.length && <EmptyState title="暂无治理资产" description="已治理企业可登记数据中台资产元数据；未治理企业可从已采集结构生成待确认候选。" />}</section>
       <PaginationBar page={Math.min(page, pages)} pageSize={pageSize} total={filtered.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} /></div>
-      <aside className="mapping-v2-inspector"><header><strong>治理资产详情</strong>{selected && <div><ResourceHistoryLink resourceType="governance_asset" resourceId={selected.id} /><button onClick={() => open(selected)}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove(selected)}><Trash2 size={14} /> 删除</button></div>}</header>
+      <aside className="mapping-v2-inspector"><header><strong>治理资产详情</strong>{selected && <div><ResourceHistoryLink resourceType="governance_asset" resourceId={selected.id} /><button onClick={() => open(selected)}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove(selected)}><Trash2 size={14} /> 删除</button></div>}<button className="detail-close-btn" title="收起详情" aria-label="收起详情" onClick={closeDetail}><X size={14} /></button></header>
         <div className="mapping-drawer-body">{!selected ? <EmptyState title="请选择治理资产" description="右侧展示字段契约及可追溯的上游来源。" /> : <><h3>{selected.name}</h3><p>{selected.description || '尚未填写说明。'}</p><dl><div><dt>资产编码</dt><dd>{selected.code}</dd></div><div><dt>登记方式</dt><dd>{selected.catalog_origin === 'schema_candidate' ? '物理结构候选' : '企业治理目录登记'}</dd></div><div><dt>确认状态</dt><dd>{selected.verification_status === 'confirmed' ? '已人工确认' : '待人工确认'}</dd></div><div><dt>资产类型</dt><dd>{selected.asset_kind || '—'}</dd></div><div><dt>治理主题</dt><dd>{selected.governance_subject || '—'}</dd></div><div><dt>资产版本</dt><dd>{selected.asset_version || '—'}</dd></div><div><dt>上游血缘</dt><dd>{selected.lineage_label || '未登记；不推断物理来源'}</dd></div></dl><h4>字段契约</h4><div className="governance-field-list">{(selected.fields || []).map((field) => <div key={field.name}><strong>{field.name}</strong><span>{field.data_type || '类型未登记'}{field.is_key ? ' · 标识字段' : ''}</span></div>)}</div><p className="mapping-layer-note"><CheckCircle2 size={15} /> 本页只登记元数据，尚未对接企业数据中台 API，不代表实例数据可读取。</p></>}</div></aside></div>
     {editor && <Modal wide title={editor.id ? '编辑治理资产' : '登记治理资产'} onClose={() => setEditor(null)} footer={<><button className="btn secondary" onClick={() => setEditor(null)}>取消</button><button className="btn primary" form="governance-asset-form" disabled={busy}>{busy ? '保存中…' : '保存到工作状态'}</button></>}>
       <form id="governance-asset-form" className="form-sections" onSubmit={save}>

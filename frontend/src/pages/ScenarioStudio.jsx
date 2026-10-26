@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, CircleDot, Clock3, Pencil, Play, Plus, Search, ShieldAlert, Trash2, Workflow } from 'lucide-react';
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronRight, CircleDot, Clock3, Pencil, Play, Plus, Search, ShieldAlert, Trash2, Workflow, X } from 'lucide-react';
 import { api, formatTime } from '../api';
 import Modal from '../components/Modal';
 import ResourceHistoryLink from '../components/ResourceHistoryLink';
 import useHistoryResourceFocus from '../hooks/useHistoryResourceFocus';
 import { EmptyState, ErrorState, Loading } from '../components/StateViews';
 import PaginationBar from '../components/PaginationBar';
+import useDetailPanel from '../hooks/useDetailPanel';
 
 const STEP_TYPES = [['object_resolve', '定位对象'], ['link_traverse', '穿透关系'], ['mapping_read', '读取数据映射'], ['rule_execute', '执行规则'], ['action_propose', '提议动作'], ['approval', '人工审批'], ['verify', '验证结果']];
 const STEP_LABELS = Object.fromEntries(STEP_TYPES);
@@ -36,7 +37,7 @@ function generateSteps(form, actions = []) {
 }
 
 export default function ScenarioStudio({ activeId, notify }) {
-  const [items, setItems] = useState(null); const [runs, setRuns] = useState([]); const [selected, setSelected] = useState(null); const [run, setRun] = useState(null);
+  const [items, setItems] = useState(null); const [runs, setRuns] = useState([]); const [selected, setSelected] = useState(null); const [run, setRun] = useState(null); const { detailOpen, openDetail, closeDetail } = useDetailPanel();
   const [objects, setObjects] = useState([]); const [links, setLinks] = useState([]); const [rules, setRules] = useState([]); const [actions, setActions] = useState([]); const [sources, setSources] = useState([]); const [mappings, setMappings] = useState([]);
   const [query, setQuery] = useState(''); const [page, setPage] = useState(1); const [pageSize, setPageSize] = useState(20); const [editing, setEditing] = useState(null); const [form, setForm] = useState(emptyForm()); const [busy, setBusy] = useState(''); const [error, setError] = useState('');
 
@@ -47,7 +48,7 @@ export default function ScenarioStudio({ activeId, notify }) {
         api(`/api/ontologies/${activeId}/enterprise/business-scenarios`), api(`/api/ontologies/${activeId}/scenario-runs`), api(`/api/ontologies/${activeId}/object-types`), api(`/api/ontologies/${activeId}/link-types`), api(`/api/ontologies/${activeId}/business-rules`), api(`/api/ontologies/${activeId}/actions`), api(`/api/ontologies/${activeId}/enterprise/data-sources`), api(`/api/ontologies/${activeId}/enterprise/data-mappings`),
       ]);
       setItems(scenarios); setRuns(history); setObjects(objectRows); setLinks(linkRows); setRules(ruleRows); setActions(actionRows); setSources(sourceRows); setMappings(mappingRows);
-      setSelected((old) => scenarios.find((item) => item.id === (preferredId || old?.id)) || scenarios[0] || null);
+      setSelected((old) => scenarios.find((item) => item.id === (preferredId || old?.id)) || null);
       setRun((old) => history.find((item) => item.id === old?.id) || history[0] || null);
     } catch (e) { setError(e.message); }
   };
@@ -55,7 +56,7 @@ export default function ScenarioStudio({ activeId, notify }) {
   const visible = useMemo(() => (items || []).filter((item) => `${item.code} ${item.name} ${item.category} ${item.business_goal || ''}`.toLowerCase().includes(query.toLowerCase())), [items, query]);
   const pages = Math.max(1, Math.ceil(visible.length / pageSize)); const currentPage = Math.min(page, pages); const pageRows = visible.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { setPage(1); }, [query, pageSize]);
-  useHistoryResourceFocus({ resourceTypes: ['business_scenario'], items, visible, pageSize, setPage, onSelect: setSelected, ready: Boolean(items) });
+  useHistoryResourceFocus({ resourceTypes: ['business_scenario'], items, visible, pageSize, setPage, onSelect: (item) => { setSelected(item); openDetail(); }, ready: Boolean(items) });
   const selectedRun = run?.scenario_id === selected?.id ? run : runs.find((item) => item.scenario_id === selected?.id);
   const path = (selected?.key_path || selected?.description || '').split(/\s*(?:→|->)\s*/).filter(Boolean);
   const sourceLabel = (code) => sources.find((item) => item.code === code)?.name || code;
@@ -71,7 +72,7 @@ export default function ScenarioStudio({ activeId, notify }) {
     try { const saved = await api(editing?.create ? `/api/ontologies/${activeId}/enterprise/business-scenarios` : `/api/ontologies/${activeId}/enterprise/business-scenarios/${editing.id}`, { method: editing?.create ? 'POST' : 'PUT', body: JSON.stringify(body) }); setEditing(null); await load(saved.id); notify('业务场景已保存到工作状态'); } catch (e) { notify(e.message); } finally { setBusy(''); }
   };
   const remove = async () => { if (!selected || !window.confirm(`确定删除业务场景“${selected.name}”吗？`)) return; try { await api(`/api/enterprise/business-scenarios/${selected.id}`, { method: 'DELETE' }); setSelected(null); load(); } catch (e) { notify(e.message); } };
-  const execute = async () => { if (!selected) return; setBusy('run'); try { const result = await api(`/api/ontologies/${activeId}/scenarios/${selected.id}/run`, { method: 'POST', body: JSON.stringify({ sample_data: {} }) }); setRun(result); setRuns((old) => [result, ...old]); notify('已生成流程预览，尚未调用业务系统'); } catch (e) { notify(e.message); } finally { setBusy(''); } };
+  const execute = async () => { if (!selected) return; setBusy('run'); try { const result = await api(`/api/ontologies/${activeId}/scenarios/${selected.id}/run`, { method: 'POST', body: JSON.stringify({ sample_data: {} }) }); setRun(result); setRuns((old) => [result, ...old]); openDetail(); notify('已生成流程预览，尚未调用业务系统'); } catch (e) { notify(e.message); } finally { setBusy(''); } };
 
   const updateResource = (field, value) => setForm((current) => ({ ...current, [field]: value, entry_object: field === 'related_objects' && !value.includes(current.entry_object) ? value[0] || '' : current.entry_object, steps: [] }));
   const updateMappings = (codes) => setForm((current) => ({ ...current, related_mappings: codes, source_codes: unique(codes.map((code) => mappings.find((item) => item.code === code)?.source_code)), steps: [] }));
@@ -93,8 +94,8 @@ export default function ScenarioStudio({ activeId, notify }) {
   if (!items) return <Loading />;
   return <div className="scenario-studio">
     <section className="scenario-header"><div><span>场景驱动建模</span><h2>业务场景</h2><p>记录业务目标、对象关系、规则和行动；执行步骤可在语义模型建立后配置。</p></div><button className="oma-button" onClick={openCreate}><Plus size={16} /> 新建业务场景</button></section>
-    <div className="scenario-layout">
-      <aside className="scenario-list"><label><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索场景、目标或编码" /></label><header><strong>场景目录</strong><span>{visible.length} 项</span></header>{pageRows.map((item) => <button key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => { setSelected(item); setRun(runs.find((value) => value.scenario_id === item.id) || null); }}><i><Workflow size={17} /></i><span><b>{item.name}</b><code>{item.code}</code><small>{item.category || '未分类'} · {statusLabel[item.status] || item.status}</small></span><ChevronRight size={15} /></button>)}{!visible.length && <EmptyState title="暂无业务场景" description="从一个真实的业务问题开始建立场景。" />}<PaginationBar page={currentPage} pageSize={pageSize} total={visible.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} /></aside>
+    <div className={`scenario-layout ${detailOpen ? 'detail-open' : 'detail-collapsed'}`}>
+      <aside className="scenario-list"><label><Search size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索场景、目标或编码" /></label><header><strong>场景目录</strong><span>{visible.length} 项</span></header>{pageRows.map((item) => <button key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => { setSelected(item); setRun(runs.find((value) => value.scenario_id === item.id) || null); openDetail(); }}><i><Workflow size={17} /></i><span><b>{item.name}</b><code>{item.code}</code><small>{item.category || '未分类'} · {statusLabel[item.status] || item.status}</small></span><ChevronRight size={15} /></button>)}{!visible.length && <EmptyState title="暂无业务场景" description="从一个真实的业务问题开始建立场景。" />}<PaginationBar page={currentPage} pageSize={pageSize} total={visible.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} /></aside>
       <main className="scenario-canvas">{selected ? <><header><div><span>{selected.category || '业务场景'}</span><h3>{selected.name}</h3><code>{selected.code}</code></div><div><ResourceHistoryLink resourceType="business_scenario" resourceId={selected.id} /><button onClick={openEdit}><Pencil size={14} /> 编辑设计</button><button className="danger-link" onClick={remove}><Trash2 size={14} /> 删除</button><button className="oma-button" disabled={busy === 'run' || !Array.isArray(selected.steps) || !selected.steps.some((step) => step && typeof step === 'object')} title="需要先配置结构化执行步骤；预览不会调用真实系统" onClick={execute}><Play size={15} />{busy === 'run' ? '生成中…' : '预览执行流程'}</button></div></header>
         <section className="scenario-goal"><CircleDot size={18} /><div><span>业务目标</span><strong>{selected.business_goal || selected.description || '尚未定义'}</strong><small>触发：{selected.trigger || '按需运行'} · 责任人：{selected.owner || '待指定'}</small></div></section>
         <section className="scenario-path"><div className="section-caption"><strong>关键业务路径</strong><span>入口对象：{selected.entry_object || '未定义'}</span></div><div>{path.length ? path.map((item, index) => <span key={`${item}-${index}`}><b>{item}</b>{index < path.length - 1 && <ChevronRight size={18} />}</span>) : <p>请补充关键对象关系路径。</p>}</div></section>
@@ -102,7 +103,7 @@ export default function ScenarioStudio({ activeId, notify }) {
         <div className="scenario-resource-grid"><section><strong>对象与数据</strong><dl><div><dt>主要对象</dt><dd>{(selected.related_objects || []).join('、') || selected.entry_object || '—'}</dd></div><div><dt>输入数据</dt><dd>{selected.input_data || '—'}</dd></div><div><dt>关联系统</dt><dd>{selected.connected_systems || (selected.source_systems || []).join('、') || '—'}</dd></div><div><dt>关联数据映射</dt><dd>{(selected.related_mappings || []).map(mappingLabel).join('、') || '—'}</dd></div></dl></section><section><strong>决策与执行</strong><dl><div><dt>关联规则</dt><dd>{(selected.related_rules || selected.related_logic || []).join('、') || '—'}</dd></div><div><dt>关联动作</dt><dd>{(selected.related_actions || []).join('、') || '—'}</dd></div><div><dt>输出/状态变化</dt><dd>{selected.output_change || '—'}</dd></div></dl></section></div>
         {(selected.acceptance_criteria || []).length > 0 && <section className="scenario-acceptance"><strong>历史验收口径</strong>{selected.acceptance_criteria.map((item) => <span key={item}><CheckCircle2 size={14} />{item}</span>)}</section>}
       </> : <EmptyState title="选择一个场景" description="查看业务目标、对象关系与规则行动。" />}</main>
-      <aside className="scenario-run-panel"><header><strong>流程预览记录</strong>{selectedRun && <span>{formatTime(selectedRun.created_at)}</span>}</header><p className="form-hint">仅展示配置的流程轨迹，未读取实时数据，也未调用规则引擎或业务系统。</p>{selectedRun ? <><div className="scenario-result"><ShieldAlert size={19} /><span><b>{selectedRun.result?.conclusion}</b><small>已配置 {selectedRun.result?.configured_rule_steps ?? '—'} 个规则步骤；实际执行结果未验证</small></span></div><ol className="scenario-run-steps">{selectedRun.steps?.map((step, index) => <li key={`${step.stage}-${index}`}><i><Clock3 size={14} /></i><span><b>{step.stage}</b><small>{step.detail}</small><code>{step.tool}</code></span></li>)}</ol><section className="scenario-action-result"><strong>拟执行动作</strong><span>{selectedRun.result?.action || '无'}</span><em>尚未执行</em></section></> : <div className="scenario-run-empty"><Play size={28} /><strong>尚无流程预览</strong><span>配置执行步骤后，可查看拟执行路径。</span></div>}</aside>
+      <aside className="scenario-run-panel"><header><strong>流程预览记录</strong>{selectedRun && <span>{formatTime(selectedRun.created_at)}</span>}<button className="detail-close-btn" title="收起详情" aria-label="收起详情" onClick={closeDetail}><X size={14} /></button></header><p className="form-hint">仅展示配置的流程轨迹，未读取实时数据，也未调用规则引擎或业务系统。</p>{selectedRun ? <><div className="scenario-result"><ShieldAlert size={19} /><span><b>{selectedRun.result?.conclusion}</b><small>已配置 {selectedRun.result?.configured_rule_steps ?? '—'} 个规则步骤；实际执行结果未验证</small></span></div><ol className="scenario-run-steps">{selectedRun.steps?.map((step, index) => <li key={`${step.stage}-${index}`}><i><Clock3 size={14} /></i><span><b>{step.stage}</b><small>{step.detail}</small><code>{step.tool}</code></span></li>)}</ol><section className="scenario-action-result"><strong>拟执行动作</strong><span>{selectedRun.result?.action || '无'}</span><em>尚未执行</em></section></> : <div className="scenario-run-empty"><Play size={28} /><strong>尚无流程预览</strong><span>配置执行步骤后，可查看拟执行路径。</span></div>}</aside>
     </div>
     {editing && <Modal wide title={editing.create ? '新建业务场景' : `编辑场景 · ${editing.name}`} subtitle="用已建模资源组装可运行、可验收的业务闭环" onClose={() => setEditing(null)} footer={<><button className="btn secondary" onClick={() => setEditing(null)}>取消</button><button className="btn primary" form="scenario-form" disabled={busy === 'save'}>{busy === 'save' ? '保存中…' : '保存场景'}</button></>}>
       <form id="scenario-form" className="form-sections" onSubmit={save}>

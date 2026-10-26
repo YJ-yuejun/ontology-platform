@@ -76,7 +76,7 @@ export default function ObjectCopyDialog({ activeId, source, objects, links, not
         </div>
         <label className="core-object-toggle"><input type="checkbox" checked={Boolean(form.is_core)} onChange={(e) => setForm({ ...form, is_core: e.target.checked })} /><Star size={15} /><span><b>核心对象</b><small>沿用源对象设置，可按需调整。</small></span></label>
         <label><span>业务定义</span><textarea value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="说明副本与源对象在业务上的区别" /></label>
-        <p className="template-field-note">不复制：模板对象 ID、实现接口、数据映射与实例数据。副本保存后请到“数据源与映射”为它建立自己的映射。</p>
+        <p className="template-field-note">不复制：模板对象 ID、实现接口、数据映射与实例数据。副本保存后请到“数据映射”为它建立自己的映射。</p>
       </section>}
       {step === 'properties' && <section className="form-section">
         <p className="form-hint">已带入源对象的全部属性。可以删减、改名或调整类型，主键仍必须唯一。{changed.properties && <b> 已修改。</b>}</p>

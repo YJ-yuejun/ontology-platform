@@ -6,6 +6,7 @@ import { actorLabel, dataTypeLabel, localizeModelText, operationLabel, statusLab
 import { resourcePageUrl, UNDESTINED_RESOURCE_TYPES } from '../historyNavigation';
 import { ErrorState, Loading } from '../components/StateViews';
 import PaginationBar from '../components/PaginationBar';
+import useDetailPanel from '../hooks/useDetailPanel';
 import './ActivityLog.css';
 
 const resourceNames = {
@@ -99,12 +100,14 @@ export default function ActivityLog({ activeId, active, embedded = false }) {
   const [pageSize, setPageSize] = useState(returnPageSize);
   const [revision, setRevision] = useState(0);
   const [selectedId, setSelectedId] = useState(returnRecordId);
+  const { detailOpen, openDetail, closeDetail } = useDetailPanel(Boolean(returnRecordId));
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     setPage(returnPage);
     setSelectedId(returnRecordId);
+    if (returnRecordId) openDetail();
     // 仅在切换本体或改变资源作用域时重置；不跟随 record_id 变化，避免打断用户当前选择
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, resourceType, resourceId]);
@@ -165,10 +168,10 @@ export default function ActivityLog({ activeId, active, embedded = false }) {
       </div>
       {resourceGone && <div className="history-scope history-resource-gone"><History size={14} /><span>该资源已不存在或不属于当前本体，已退回变更记录；历史记录仍然保留。</span><button onClick={dismissResourceGone}><X size={13} /> 知道了</button></div>}
       {resourceId && <div className="history-scope"><History size={14} /><span>仅看当前{resourceNames[resourceType] || '资源'}：<strong>{scopeName}</strong><code>{resourceId}</code></span><button onClick={resetScope}><X size={13} /> 查看本体全部记录</button></div>}
-      <div className="history-layout">
+      <div className={`history-layout ${detailOpen ? 'detail-open' : 'detail-collapsed'}`}>
         <div className="history-list-wrap">
           <div className="history-list-head"><span>时间</span><span>资源</span><span>操作</span><span>变更内容</span><span>操作人</span></div>
-          {data?.items.map((item) => <button type="button" className={`history-log-row ${selectedId === item.mvc_id ? 'selected' : ''}`} onClick={() => setSelectedId(item.mvc_id)} key={item.mvc_id}>
+          {data?.items.map((item) => <button type="button" className={`history-log-row ${selectedId === item.mvc_id ? 'selected' : ''}`} onClick={() => { setSelectedId(item.mvc_id); openDetail(); }} key={item.mvc_id}>
             <time>{fullTime(item.mvc_created_at)}</time>
             <span className="history-resource"><strong>{item.mvc_resource_name || resourceNames[item.mvc_res_type] || '资源'}</strong><small>{resourceNames[item.mvc_res_type] || item.mvc_res_type || '资源'} · {item.mvc_chg_obj || '无 ID'}</small></span>
             <span><em className={`history-operation ${item.mvc_chg_type === '删除' ? 'delete' : item.mvc_chg_type === '新增' ? 'create' : ''}`}>{operationLabel(item.mvc_chg_type)}</em></span>
@@ -180,7 +183,7 @@ export default function ActivityLog({ activeId, active, embedded = false }) {
           <PaginationBar page={page} pageSize={pageSize} total={data?.total ?? 0} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} />
         </div>
         <aside className="history-detail">
-          <header><strong>变更详情</strong><span>{selected ? `#${selected.mvc_id}` : ''}</span></header>
+          <header><strong>变更详情</strong><span>{selected ? `#${selected.mvc_id}` : ''}</span><button className="detail-close-btn" title="收起详情" aria-label="收起详情" onClick={closeDetail}><X size={14} /></button></header>
           {selected ? <div className="history-detail-body">
             <div className="history-detail-title"><em className={`history-operation ${selected.mvc_chg_type === '删除' ? 'delete' : selected.mvc_chg_type === '新增' ? 'create' : ''}`}>{operationLabel(selected.mvc_chg_type)}</em><h3>{selected.mvc_resource_name || resourceNames[selected.mvc_res_type] || '资源'}</h3><p>{resourceNames[selected.mvc_res_type] || selected.mvc_res_type}</p></div>
             <div className="history-detail-actions">

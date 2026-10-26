@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Boxes, CheckCircle2, ChevronRight, Layers3, Pencil, Plus, Search, ShieldCheck, Trash2,
+  Boxes, CheckCircle2, ChevronRight, Layers3, Pencil, Plus, Search, ShieldCheck, Trash2, X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, formatTime } from '../api';
@@ -10,6 +10,7 @@ import ResourceHistoryLink from '../components/ResourceHistoryLink';
 import useHistoryResourceFocus from '../hooks/useHistoryResourceFocus';
 import { ObjectTypeIcon } from '../components/ObjectTypeIcon';
 import PropertyEditor from '../components/PropertyEditor';
+import useDetailPanel from '../hooks/useDetailPanel';
 import { EmptyState, ErrorState, Loading } from '../components/StateViews';
 import PaginationBar from '../components/PaginationBar';
 import useCreateIntent from '../hooks/useCreateIntent';
@@ -30,6 +31,7 @@ export default function Interfaces({ activeId, refreshOntologies, notify }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [selected, setSelected] = useState(null);
+  const { detailOpen, openDetail, closeDetail } = useDetailPanel();
   const [editing, setEditing] = useState(null);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState(emptyForm());
@@ -44,7 +46,9 @@ export default function Interfaces({ activeId, refreshOntologies, notify }) {
       ]);
       setItems(interfaces);
       setObjects(objectTypes);
-      setSelected(interfaces.find((item) => item.id === preferredId) || interfaces[0] || null);
+      const next = interfaces.find((item) => item.id === preferredId) || null;
+      setSelected(next);
+      if (next) openDetail();
     } catch (loadError) {
       setError(loadError.message);
     }
@@ -60,8 +64,8 @@ export default function Interfaces({ activeId, refreshOntologies, notify }) {
   const currentPage = Math.min(page, pages);
   const pageRows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   useEffect(() => { setPage(1); }, [query, status, pageSize]);
-  useEffect(() => { if (items && !filtered.some((item) => item.id === selected?.id)) setSelected(filtered[0] || null); }, [items, filtered, selected?.id]);
-  useHistoryResourceFocus({ resourceTypes: ['interface'], items, visible: filtered, pageSize, setPage, onSelect: setSelected, ready: Boolean(items) });
+  useEffect(() => { if (items && selected && !filtered.some((item) => item.id === selected?.id)) setSelected(null); }, [items, filtered, selected?.id]);
+  useHistoryResourceFocus({ resourceTypes: ['interface'], items, visible: filtered, pageSize, setPage, onSelect: (item) => { setSelected(item); openDetail(); }, ready: Boolean(items) });
 
   const implementedBy = (interfaceId) => objects.filter((item) => (item.interface_ids || []).includes(interfaceId));
   const openManualCreate = () => { setForm(emptyForm()); setCreating(true); setEditing(null); };
@@ -89,6 +93,7 @@ export default function Interfaces({ activeId, refreshOntologies, notify }) {
       );
       close();
       await load(saved.id);
+      openDetail();
       refreshOntologies(activeId);
     } catch (saveError) {
       notify(saveError.message);
@@ -131,7 +136,7 @@ export default function Interfaces({ activeId, refreshOntologies, notify }) {
       <button onClick={() => navigate('/ontology/model/object-types')}>管理对象类型 <ChevronRight size={14} /></button>
     </section>
 
-    <div className="oma-resource-layout oma-interface-layout">
+    <div className={`oma-resource-layout oma-interface-layout ${detailOpen ? 'detail-open' : 'detail-collapsed'}`}>
       <section className="oma-resource-list">
         <header><strong>接口目录</strong><span>用于复用跨对象类型的字段规范与业务能力</span></header>
         {!filtered.length ? <EmptyState
@@ -140,7 +145,7 @@ export default function Interfaces({ activeId, refreshOntologies, notify }) {
           action={!query && status === 'all' && <button className="oma-button" onClick={openCreate}><Plus size={15} /> 新建接口</button>}
         /> : <div className="oma-interface-table">
           <div className="oma-interface-head"><span>接口名称</span><span>稳定标识</span><span>必需属性</span><span>实现对象</span><span>状态</span><span>最后编辑</span></div>
-          {pageRows.map((item) => <button key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => setSelected(item)}>
+          {pageRows.map((item) => <button key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => { setSelected(item); openDetail(); }}>
             <span className="oma-resource-name"><i><Layers3 size={16} /></i><b>{item.display_name}</b></span>
             <code>{item.name}</code>
             <span>{item.properties?.length || 0} 项</span>
@@ -153,7 +158,7 @@ export default function Interfaces({ activeId, refreshOntologies, notify }) {
 
       <aside className="oma-resource-inspector oma-interface-inspector">
         {selected ? <>
-          <header><span>接口定义</span><div><ResourceHistoryLink resourceType="interface" resourceId={selected.id} /><button onClick={() => openEdit(selected)}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove(selected)} title="删除接口"><Trash2 size={14} /></button></div></header>
+          <header><span>接口定义</span><div><ResourceHistoryLink resourceType="interface" resourceId={selected.id} /><button onClick={() => openEdit(selected)}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove(selected)} title="删除接口"><Trash2 size={14} /></button></div><button className="detail-close-btn" title="收起详情" aria-label="收起详情" onClick={closeDetail}><X size={14} /></button></header>
           <div className="oma-inspector-title"><i><Layers3 size={20} /></i><div><h3>{selected.display_name}</h3><code>{selected.name}</code></div></div>
           <p>{selected.description || '尚未填写接口说明。'}</p>
           <dl>

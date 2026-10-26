@@ -9,6 +9,7 @@ import PaginationBar from '../components/PaginationBar';
 import useCreateIntent from '../hooks/useCreateIntent';
 import useHistoryResourceFocus from '../hooks/useHistoryResourceFocus';
 import { useModelingEntry } from '../components/ModelingEntry';
+import useDetailPanel from '../hooks/useDetailPanel';
 
 const baseForm = () => ({ code: '', type: '规则', name: '', applicable_objects: [], input_objects: [],
   input_properties: [], input_data_description: '', input_property_notes: '', logic: '', output: '', trigger_mode: '调用',
@@ -96,6 +97,7 @@ export default function BusinessRules({ activeId, notify }) {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [selected, setSelected] = useState(null);
+  const { detailOpen, openDetail, closeDetail } = useDetailPanel();
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(baseForm());
   const [help, setHelp] = useState(false);
@@ -110,7 +112,7 @@ export default function BusinessRules({ activeId, notify }) {
         api(`/api/ontologies/${activeId}/object-types`),
       ]);
       setItems(logic); setObjects(types);
-      setSelected((old) => logic.find((item) => item.id === old?.id) || logic[0] || null);
+      setSelected((old) => logic.find((item) => item.id === old?.id) || null);
     } catch (cause) { setError(cause.message); }
   };
   useEffect(() => { setItems(null); setSelected(null); load(); }, [activeId]);
@@ -129,8 +131,8 @@ export default function BusinessRules({ activeId, notify }) {
   const pages = Math.max(1, Math.ceil(visible.length / pageSize));
   const currentPage = Math.min(page, pages);
   const pageRows = useMemo(() => visible.slice((currentPage - 1) * pageSize, currentPage * pageSize), [visible, currentPage, pageSize]);
-  useEffect(() => { if (items && !pageRows.some((item) => item.id === selected?.id)) setSelected(pageRows[0] || null); }, [items, pageRows, selected?.id]);
-  useHistoryResourceFocus({ resourceTypes: ['business_rule', 'logic_definition', '规则'], items, visible, pageSize, setPage, onSelect: setSelected, ready: Boolean(items) });
+  useEffect(() => { if (items && selected && !pageRows.some((item) => item.id === selected?.id)) setSelected(null); }, [items, pageRows, selected?.id]);
+  useHistoryResourceFocus({ resourceTypes: ['business_rule', 'logic_definition', '规则'], items, visible, pageSize, setPage, onSelect: (item) => { setSelected(item); openDetail(); }, ready: Boolean(items) });
   const objectName = (apiName) => getObjectName(objects, apiName);
   const objectOptions = useMemo(() => objects.map((object) => ({ value: object.name, label: object.display_name,
     meta: [object.business_domain_name, object.subject_domain_name].filter(Boolean).join(' / ') || object.name })), [objects]);
@@ -186,7 +188,7 @@ export default function BusinessRules({ activeId, notify }) {
       const saved = await api(path, { method: editing.create ? 'POST' : 'PUT',
         body: JSON.stringify({ code: form.code, name: form.name, category: form.type,
           status: editing.create ? 'draft' : editing.status, description: editing.create ? form.logic : editing.description || form.logic, payload }) });
-      setEditing(null); await load(); setSelected(saved); notify('规则／函数定义已保存到工作状态');
+      setEditing(null); await load(); setSelected(saved); openDetail(); notify('规则／函数定义已保存到工作状态');
     } catch (cause) { notify(cause.message); } finally { setBusy(false); }
   };
   const remove = async (item) => {
@@ -201,12 +203,12 @@ export default function BusinessRules({ activeId, notify }) {
   return <div className="rule-v2 mapping-v2">
     <div className="mapping-topbar"><div className="rule-top-title"><strong>规则</strong><span>{items.length} 条</span></div><label className="rule-top-search"><Search size={16} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="搜索规则名称、逻辑ID、适用对象、输入对象/属性或逻辑" /></label><div className="mapping-top-actions"><div className="mapping-help-wrap"><button className="mapping-icon-button" aria-label="规则说明" onClick={() => setHelp(!help)}><HelpCircle size={17} /></button>{help && <div className="mapping-help"><button aria-label="关闭说明" onClick={() => setHelp(false)}><X size={14} /></button><strong>规则</strong><p>按模板定义规则或函数的适用对象、输入、逻辑和输出。版本保留在详情中，列表只展示便于筛选和定位的核心字段。</p></div>}</div><button className="mapping-primary" onClick={openCreate}><Plus size={16} />新建规则／函数</button></div></div>
     <div className="mapping-controls"><select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setPage(1); }}><option value="all">全部状态</option>{[...new Set(items.map(ruleStatus))].map((value) => <option key={value} value={value}>{value}</option>)}</select><select value={type} onChange={(event) => { setType(event.target.value); setPage(1); }}><option value="all">全部类型</option><option value="规则">规则</option><option value="函数">函数</option></select><span className="rule-result-count">当前筛选 {visible.length} 条</span></div>
-    <div className="mapping-v2-layout"><div className="mapping-v2-list-pane"><div className="mapping-v2-pane-heading"><strong>规则目录</strong><span>列表展示核心字段；版本保留在右侧详情</span></div><section className="mapping-v2-table rule-list"><header><span>逻辑 ID／名称</span><span>类型</span><span>适用对象</span><span>输入对象/数据</span><span>输入属性</span><span>触发方式</span><span>实时性</span><span>状态</span></header>{pageRows.map((item) => {
+    <div className={`mapping-v2-layout ${detailOpen ? 'detail-open' : 'detail-collapsed'}`}><div className="mapping-v2-list-pane"><div className="mapping-v2-pane-heading"><strong>规则目录</strong><span>列表展示核心字段；版本保留在右侧详情</span></div><section className="mapping-v2-table rule-list"><header><span>逻辑 ID／名称</span><span>类型</span><span>适用对象</span><span>输入对象/数据</span><span>输入属性</span><span>触发方式</span><span>实时性</span><span>状态</span></header>{pageRows.map((item) => {
       const normalized = normalize(item, objects);
       const inputProperties = [...normalized.input_properties.map((value) => propertyLabel(value, objects)), ...splitNotes(normalized.input_property_notes).map((value) => `${value}（原文）`)].filter((value, index, all) => all.indexOf(value) === index).join('、');
-      return <button type="button" key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => setSelected(item)}><span><strong>{item.name}</strong><small>{item.code}</small></span><span>{normalized.type}</span><span title={normalized.applicable_objects.map(objectName).join('、') || item.template_raw?.['适用对象']}>{normalized.applicable_objects.map(objectName).join('、') || item.template_raw?.['适用对象'] || '待确认'}</span><span title={inputDataLabel(normalized, objects)}>{inputDataLabel(normalized, objects) || '待确认'}</span><span title={inputProperties}>{inputProperties || '待确认'}</span><span>{normalized.trigger_mode}</span><span>{normalized.realtime_requirement}</span><span><em className="oma-status rule-status">{ruleStatus(item)}</em></span></button>;
+      return <button type="button" key={item.id} className={selected?.id === item.id ? 'selected' : ''} onClick={() => { setSelected(item); openDetail(); }}><span><strong>{item.name}</strong><small>{item.code}</small></span><span>{normalized.type}</span><span title={normalized.applicable_objects.map(objectName).join('、') || item.template_raw?.['适用对象']}>{normalized.applicable_objects.map(objectName).join('、') || item.template_raw?.['适用对象'] || '待确认'}</span><span title={inputDataLabel(normalized, objects)}>{inputDataLabel(normalized, objects) || '待确认'}</span><span title={inputProperties}>{inputProperties || '待确认'}</span><span>{normalized.trigger_mode}</span><span>{normalized.realtime_requirement}</span><span><em className="oma-status rule-status">{ruleStatus(item)}</em></span></button>;
     })}{!visible.length && <EmptyState title="没有匹配的规则或函数" description="可按模板定义规则判断或可复用计算函数。" />}</section><PaginationBar page={currentPage} pageSize={pageSize} total={visible.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} /></div>
-    <aside className="mapping-v2-inspector"><header><strong>规则详情</strong>{selected && <div><ResourceHistoryLink resourceType="logic_definition" resourceId={selected.id} /><button onClick={() => openEdit(selected)}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove(selected)}><Trash2 size={14} /> 删除</button></div>}</header><div className="mapping-drawer-body">{selected ? <><h3>{selected.name}</h3><dl>{[
+    <aside className="mapping-v2-inspector"><header><strong>规则详情</strong>{selected && <div><ResourceHistoryLink resourceType="logic_definition" resourceId={selected.id} /><button onClick={() => openEdit(selected)}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove(selected)}><Trash2 size={14} /> 删除</button></div>}<button className="detail-close-btn" title="收起详情" aria-label="收起详情" onClick={closeDetail}><X size={14} /></button></header><div className="mapping-drawer-body">{selected ? <><h3>{selected.name}</h3><dl>{[
       ['逻辑ID', selected.code], ['类型', normalize(selected, objects).type], ['适用对象', normalize(selected, objects).applicable_objects.map(objectName).join('、') || selected.template_raw?.['适用对象']],
       ['输入对象/数据', inputDataLabel(normalize(selected, objects), objects)],
       ['输入属性', [...normalize(selected, objects).input_properties.map((value) => propertyLabel(value, objects)), ...splitNotes(normalize(selected, objects).input_property_notes).map((value) => `${value}（原文）`)].filter((value, index, all) => all.indexOf(value) === index).join('、')],
