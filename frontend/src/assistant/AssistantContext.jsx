@@ -30,6 +30,10 @@ export function AssistantProvider({ activeId, active, notify, children }) {
   const [thinking, setThinking] = useState(false);
   const [webSearch, setWebSearch] = useState(false);
   const [revision, setRevision] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
+  const [hydrating, setHydrating] = useState(false);
+  const [sessionLabel, setSessionLabel] = useState('新对话');
+  const hydrationRef = useRef(0);
   const itemsRef = useRef([]);
   const pickedEls = useRef(new Map());
 
@@ -48,6 +52,10 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     setConversationId(randomConversationId());
     setThinking(false);
     setWebSearch(false);
+    setHydrated(false);
+    setHydrating(false);
+    setSessionLabel('新对话');
+    hydrationRef.current += 1;
   }, [activeId]);
 
   useEffect(() => {
@@ -137,6 +145,8 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     const text = (value ?? input).trim();
     if (!text || busy) return;
     if (!activeId) { notify?.('请先选择一个本体，再开始提问。'); return; }
+    setHydrated(true);
+    setSessionLabel('当前对话');
     const nextConversationId = conversationId || randomConversationId();
     if (!conversationId) setConversationId(nextConversationId);
     setMessages((old) => [...old, {
@@ -186,6 +196,8 @@ export function AssistantProvider({ activeId, active, notify, children }) {
   }, []);
 
   const newConversation = useCallback(() => {
+    setHydrated(true);
+    setSessionLabel('新对话');
     setConversationId(randomConversationId());
     setMessages([WELCOME]);
     setInput('');
@@ -209,6 +221,8 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     replaceItems(lastResources);
     setPicking(false);
     setOpen(true);
+    setHydrated(true);
+    setSessionLabel('历史对话');
   }, [replaceItems]);
 
   const openWith = useCallback((item, prompt = '') => {
@@ -219,7 +233,38 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     setInput(prompt);
     setOpen(true);
     setPicking(false);
+    setHydrated(true);
+    setSessionLabel((label) => label === '新对话' ? '资源提问' : label);
   }, []);
+
+  const openAssistant = useCallback(async () => {
+    if (!activeId) { setOpen(true); return; }
+    setOpen(true);
+    if (hydrated || hydrating) return;
+    setHydrating(true);
+    const token = ++hydrationRef.current;
+    try {
+      const result = await api(`/api/ontologies/${activeId}/agent/history?limit=100`);
+      if (token !== hydrationRef.current) return;
+      const latest = (result.conversations || [])
+        .filter((conversation) => conversation.mode === 'assistant')
+        .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0];
+      if (latest) {
+        loadConversation(latest);
+        setSessionLabel('最近对话');
+      } else {
+        setHydrated(true);
+        setSessionLabel('新对话');
+      }
+    } catch {
+      if (token === hydrationRef.current) {
+        setHydrated(true);
+        setSessionLabel('新对话');
+      }
+    } finally {
+      if (token === hydrationRef.current) setHydrating(false);
+    }
+  }, [activeId, hydrated, hydrating, loadConversation]);
 
   const expand = useCallback(() => {
     setReturnTo(location.pathname);
@@ -236,10 +281,10 @@ export function AssistantProvider({ activeId, active, notify, children }) {
 
   const value = useMemo(() => ({
     activeId, active, open, setOpen, picking, items, messages, input, setInput, busy,
-    conversationId, thinking, setThinking, webSearch, setWebSearch, revision,
-    startPicking, stopPicking, togglePicking, pick, remove, clear, send, openWith, expand, collapse,
+    conversationId, thinking, setThinking, webSearch, setWebSearch, revision, hydrated, hydrating, sessionLabel,
+    startPicking, stopPicking, togglePicking, pick, remove, clear, send, openWith, openAssistant, expand, collapse,
     newConversation, loadConversation, replaceItems,
-  }), [active, activeId, busy, clear, collapse, conversationId, expand, input, items, loadConversation, messages, newConversation, open, openWith, pick, picking, remove, replaceItems, revision, send, startPicking, stopPicking, thinking, togglePicking, webSearch]);
+  }), [active, activeId, busy, clear, collapse, conversationId, expand, hydrated, hydrating, input, items, loadConversation, messages, newConversation, open, openAssistant, openWith, pick, picking, remove, replaceItems, revision, send, sessionLabel, startPicking, stopPicking, thinking, togglePicking, webSearch]);
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
 }

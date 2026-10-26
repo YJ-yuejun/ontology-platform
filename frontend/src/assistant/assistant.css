@@ -366,3 +366,88 @@ body.ai-picking .vis-network, body.ai-picking .vis-network canvas { cursor: cros
   .assistant-panel { left: 12px; right: 12px; width: auto; bottom: 12px; }
   .assistant-fab { right: 16px; bottom: 16px; }
 }
+
+/* 浮窗：恢复中、历史对话、新建对话 */
+.assistant-dock-loading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  color: #6b8196;
+  background: #fbfcfe;
+  font-size: 11px;
+}
+.assistant-dock-history {
+  position: absolute;
+  inset: 54px 0 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fbfcfe;
+}
+.assistant-dock-history > header {
+  flex: none;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid #e4ecf3;
+}
+.assistant-dock-history > header > div { display: flex; align-items: center; gap: 6px; color: #2f6492; }
+.assistant-dock-history > header strong { color: #29445b; font-size: 12px; }
+.assistant-dock-history > header span { padding: 1px 5px; color: #71889a; background: #edf3f7; border-radius: 8px; font-size: 9px; }
+.assistant-dock-history > header button { width: 26px; height: 26px; display: grid; place-items: center; padding: 0; color: #73879a; background: transparent; border: 0; border-radius: 6px; cursor: pointer; }
+.assistant-dock-history > header button:hover { background: #f0f5fa; color: #285e8d; }
+.assistant-dock-history-search {
+  flex: none;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 10px 4px;
+  padding: 0 8px;
+  color: #7e93a4;
+  background: #fff;
+  border: 1px solid #d7e3ec;
+  border-radius: 7px;
+}
+.assistant-dock-history-search input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: #344f66; font-size: 10.5px; }
+.assistant-dock-history-list { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 10px 8px; }
+.assistant-dock-history-list section { margin-top: 8px; }
+.assistant-dock-history-list h4 { margin: 0 0 4px; padding-left: 2px; color: #8a9baa; font-size: 8.5px; font-weight: 600; letter-spacing: .04em; }
+.assistant-dock-history-list section > button {
+  width: 100%;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 7px;
+  color: #3e5d75;
+  background: #fff;
+  border: 1px solid #e4ecf2;
+  border-bottom: 0;
+  text-align: left;
+  cursor: pointer;
+}
+.assistant-dock-history-list section > button:last-child { border-bottom: 1px solid #e4ecf2; }
+.assistant-dock-history-list section > button:hover { background: #f5fbff; }
+.assistant-dock-history-list section > button.active { background: #edf7fe; border-color: #c9e2f1; box-shadow: inset 2px 0 #2f7fb0; }
+.assistant-dock-history-list section > button > span { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.assistant-dock-history-list b { overflow: hidden; color: #35556d; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-dock-history-list small { overflow: hidden; color: #8b9ca9; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-dock-history-list em { flex: none; color: #2d7199; font-size: 8px; font-style: normal; }
+.assistant-dock-history-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 180px; margin: 0; color: #899aa7; font-size: 9.5px; text-align: center; }
+.assistant-dock-history > footer { flex: none; padding: 8px 10px; border-top: 1px solid #e5edf3; background: #fff; }
+.assistant-dock-history > footer button { min-height: 29px; display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; color: #286994; background: #f4faff; border: 1px solid #cfe3ef; border-radius: 5px; font-size: 9px; cursor: pointer; }
+.assistant-dock-history > footer button:disabled { opacity: .45; cursor: not-allowed; }
+@media (max-width: 520px) {
+  .assistant-panel { left: 12px; right: 12px; width: auto; bottom: 12px; }
+  .assistant-panel-head { padding-left: 10px; padding-right: 8px; }
+  .assistant-panel-actions { gap: 0; }
+  .assistant-panel-actions button { width: 27px; height: 27px; }
+}
