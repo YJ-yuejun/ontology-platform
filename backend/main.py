@@ -631,6 +631,11 @@ def import_source_ddl(ontology_id: str, resource_id: str, data: DdlImportRequest
     return source_connections.save_snapshot(ontology_id, resource_id, source_connections.parse_mysql_ddl(data.ddl_text))
 
 
+@app.get("/api/ontologies/{ontology_id}/enterprise/data-sources/{resource_id}/preview-table")
+def preview_source_table(ontology_id: str, resource_id: str, table: str, limit: int = 20):
+    return source_connections.preview_table(ontology_id, resource_id, table, limit)
+
+
 @app.get("/api/ontologies/{ontology_id}/enterprise/data-sources/{resource_id}/schema")
 def get_source_schema(ontology_id: str, resource_id: str):
     return source_connections.latest_snapshot(ontology_id, resource_id) or {"schema": {"tables": []}}

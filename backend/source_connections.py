@@ -11,6 +11,8 @@ import hashlib
 import json
 import os
 import re
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -221,6 +223,49 @@ def save_snapshot(ontology_id: str, source_id: str, schema: Dict[str, Any]) -> D
     conn.close()
     return {"id": snapshot_id, "captured_at": captured_at, "table_count": len(schema["tables"]), "schema": schema}
 
+
+
+def preview_table(ontology_id: str, source_id: str, table_name: str, limit: int = 20) -> Dict[str, Any]:
+    """Read-only sample of a physical table for design-time inspection.
+
+    The table name must exist in the latest captured snapshot. The query is
+    bounded, never accepts arbitrary SQL, and never writes to the source.
+    """
+    source = _source(ontology_id, source_id)
+    snapshot = latest_snapshot(ontology_id, source_id)
+    table = next((item for item in (snapshot or {}).get("schema", {}).get("tables", [])
+                  if item.get("name") == table_name), None)
+    if not table:
+        raise repo.ValidationError("表不存在于当前结构快照中，请先刷新结构")
+    if source.get("driver") != "mysql":
+        raise repo.ValidationError("当前仅支持 MySQL 数据预览；其他来源请先接入可读数据通道")
+    if source.get("connection_check", {}).get("status") != "passed":
+        raise repo.ValidationError("请先测试连接并确保连接通过，再预览数据")
+    bounded = max(1, min(int(limit or 20), 50))
+    safe_name = table["name"].replace("`", "``")
+    try:
+        with _connect(source) as remote:
+            with remote.cursor() as cursor:
+                cursor.execute(f"SELECT * FROM `{safe_name}` LIMIT %s", (bounded + 1,))
+                rows = cursor.fetchall()
+                columns = [item[0] for item in cursor.description] if cursor.description else []
+    except repo.ValidationError:
+        raise
+    except Exception as exc:
+        raise repo.ValidationError("数据预览失败，请检查表读取权限与连接状态") from exc
+    truncated = len(rows) > bounded
+    rows = rows[:bounded]
+    def value(item):
+        if isinstance(item, (datetime, date)):
+            return item.isoformat()
+        if isinstance(item, Decimal):
+            return str(item)
+        if isinstance(item, bytes):
+            return item.decode("utf-8", errors="replace")
+        return item
+    return {"table": table["name"], "columns": columns,
+            "rows": [[value(row.get(column)) for column in columns] for row in rows],
+            "limit": bounded, "truncated": truncated, "sampled_at": repo.now()}
 
 def parse_mysql_ddl(text: str) -> Dict[str, Any]:
     """Parse a bounded CREATE TABLE subset; never execute the supplied SQL."""

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowRight, CheckCircle2, ChevronRight, Database, FileUp, HelpCircle, Network, Pencil, Plus, RefreshCw, Search, TableProperties, Trash2, X } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, ChevronRight, Database, FileUp, HelpCircle, LoaderCircle, Network, Pencil, Plus, RefreshCw, Search, TableProperties, Trash2, X } from 'lucide-react';
 import { api, formatTime } from '../api';
 import { statusLabel } from '../labels';
 import Modal from '../components/Modal';
@@ -87,6 +87,19 @@ function SchemaBrowser({ tables, query, onQueryChange, onPick, selectedTable = '
 }
 
 
+function SchemaDataPreview({ table, preview, busy, error, onRefresh }) {
+  const format = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
+  return <div className="schema-data-view">
+    <header><div><h3>{table?.name || '数据预览'}</h3><p>只读预览 · 最多 20 行 · 用于确认表结构如何承载数据</p></div><button type="button" className="schema-data-refresh" onClick={onRefresh} disabled={busy || !table}><RefreshCw size={14} /> 刷新</button></header>
+    {busy ? <div className="schema-data-state"><LoaderCircle className="spin" size={20} /><strong>正在读取样例数据…</strong></div>
+      : error ? <div className="schema-data-state error"><AlertTriangle size={20} /><strong>暂时无法预览数据</strong><p>{error}</p><small>需要先建立可读连接并测试通过；本视图不会读取或修改业务数据。</small></div>
+        : !preview ? <div className="schema-data-state"><TableProperties size={22} /><strong>还没有预览数据</strong><p>点击刷新读取该表前 20 行。</p></div>
+          : !preview.rows?.length ? <div className="schema-data-state"><TableProperties size={22} /><strong>表里暂无数据</strong><p>结构已采集，但当前表返回 0 行。</p></div>
+            : <div className="schema-data-table-wrap"><table className="schema-data-table"><thead><tr>{preview.columns.map((column) => <th key={column}>{column}</th>)}</tr></thead><tbody>{preview.rows.map((row, index) => <tr key={index}>{row.map((value, cellIndex) => <td key={cellIndex} title={format(value)}>{format(value)}</td>)}</tr>)}</tbody></table></div>}
+    {preview && <footer className="schema-data-footnote">显示 {preview.rows?.length || 0} 行{preview.truncated ? '（已截断）' : ''} · 预览不导出、不写回；完整数据浏览后续接入独立数据查询页。</footer>}
+  </div>;
+}
+
 function SourceDetailContent({ source, tables, totalFields, mappedFields, subjectName, capturedAt, busy, remoteTables, selectedTables, setSelectedTables, onTest, onBrowse, onImport, onViewMappings, onOpenSchema, onCaptureSchema, onEdit, onDelete }) {
   const coverage = totalFields ? Math.round((mappedFields / totalFields) * 100) : 0;
   const isMysql = source.driver === 'mysql';
@@ -144,10 +157,14 @@ function SourceDetailContent({ source, tables, totalFields, mappedFields, subjec
   </div>;
 }
 
-function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, targetLabel, propertyLabel, statusLabel, onClose, onViewMapping, onCreateMapping, tab = 'schema', onTabChange, detailContent }) {
+function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, targetLabel, propertyLabel, statusLabel, onClose, onViewMapping, onCreateMapping, onPreview, tab = 'schema', onTabChange, detailContent }) {
   const [query, setQuery] = useState('');
   const [mappingFilter, setMappingFilter] = useState('all');
   const [selectedTable, setSelectedTable] = useState(tables[0]?.name || '');
+  const [schemaView, setSchemaView] = useState('fields');
+  const [preview, setPreview] = useState(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState('');
   const needle = query.trim().toLowerCase();
   const mappedIndex = useMemo(() => {
     const index = new Map();
@@ -172,6 +189,20 @@ function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
     || `${table.name} ${table.comment || ''}`.toLowerCase().includes(needle)
     || (table.columns || []).some((column) => `${column.name} ${column.comment || ''} ${column.column_type || column.data_type || ''}`.toLowerCase().includes(needle))), [tableRows, needle]);
   const activeTable = visibleTables.find((table) => table.name === selectedTable) || visibleTables[0] || null;
+  const loadPreview = async (table = activeTable) => {
+    if (!table || !onPreview) return;
+    setPreviewBusy(true); setPreviewError(''); setPreview(null);
+    try { setPreview(await onPreview(source, table.name, 20)); }
+    catch (cause) { setPreviewError(cause.message); }
+    finally { setPreviewBusy(false); }
+  };
+  const chooseTable = (name) => {
+    setSelectedTable(name);
+    if (schemaView === 'data') {
+      const table = tableRows.find((item) => item.name === name);
+      if (table) loadPreview(table);
+    }
+  };
   const fields = useMemo(() => {
     if (!activeTable) return [];
     return activeTable.columns.filter((column) => {
@@ -187,19 +218,13 @@ function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
     return tables.some((table) => table.name === tableName && (table.columns || []).some((column) => column.name === fieldName));
   }).length;
   const coverage = totalFields ? Math.round((mappedFields / totalFields) * 100) : 0;
-  const mappedTables = tableRows.filter((table) => table.mapped > 0).length;
   const statusClass = (value) => value === '已确认' ? 'confirmed' : value === '已停用' ? 'disabled' : 'pending';
   const fieldEntries = (table, column) => mappedIndex.get(`${table.name}\u0000${column.name}`) || [];
   return <Modal wide={tab === 'detail'} extraWide={tab === 'schema'} title={source.name} subtitle={`${source.code} · ${source.system_type || '未分类'} · ${driverLabel(source.driver)}`} onClose={onClose} footer={<><span className="schema-modal-footnote">{tab === 'detail' ? '数据源信息来自登记与结构采集；映射状态来自数据映射页。' : '结构快照只读；映射状态来自数据映射页，字段映射仍在数据映射中维护。'}</span><button type="button" className="btn secondary" onClick={onClose}>关闭</button></>}>
     <nav className="source-modal-tabs" aria-label="数据源详情与表结构"><button type="button" className={tab === 'detail' ? 'active' : ''} onClick={() => onTabChange('detail')}>数据源详情</button><button type="button" className={tab === 'schema' ? 'active' : ''} onClick={() => onTabChange('schema')}>表结构 <em>{tables.length}</em></button></nav>
     {tab === 'detail' ? detailContent : <div className="schema-browser-modal">
-      <div className="schema-browser-stats">
-        <div><small>物理表</small><b>{tables.length}</b><span>{mappedTables} 张已有映射</span></div>
-        <div><small>字段</small><b>{totalFields}</b><span>来自结构快照</span></div>
-        <div className="good"><small>已映射字段</small><b>{mappedFields}</b><span>至少有一条字段映射</span></div>
-        <div className="warn"><small>未映射字段</small><b>{Math.max(0, totalFields - mappedFields)}</b><span>待补映射</span></div>
-        <div><small>字段覆盖率</small><b>{coverage}%</b><span>已映射 / 全部字段</span></div>
-      </div>
+      <div className="schema-view-tabs"><button type="button" className={schemaView === 'fields' ? 'active' : ''} onClick={() => setSchemaView('fields')}><TableProperties size={14} /> 字段结构</button><button type="button" className={schemaView === 'data' ? 'active' : ''} onClick={() => { setSchemaView('data'); loadPreview(activeTable); }} disabled={!activeTable}><Database size={14} /> 数据预览</button><span>结构用于映射，数据预览用于确认承载方式</span></div>
+      {schemaView === 'fields' ? <>
       <div className="schema-browser-toolbar">
         <label className="mapping-schema-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索表名、字段名、类型或注释" aria-label="搜索表结构" /></label>
         <div className="schema-browser-segments" role="group" aria-label="映射状态筛选">
@@ -211,12 +236,7 @@ function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
       </div>
       <div className={`schema-browser-layout ${tables.length <= 1 ? 'single-table' : ''}`}>
         <aside className="schema-table-list">
-          <header><span>物理表</span><b>{visibleTables.length}</b></header>
-          <div className="schema-table-scroll">{visibleTables.map((table) => <button type="button" key={table.name} className={activeTable?.name === table.name ? 'active' : ''} onClick={() => setSelectedTable(table.name)}>
-            <span><strong>{table.name}</strong><small>{table.comment || '暂无表注释'}</small></span>
-            <em>{table.mapped}/{table.columns.length} 已映射</em>
-            <i><b style={{ width: `${table.columns.length ? Math.max(3, (table.mapped / table.columns.length) * 100) : 0}%` }} /></i>
-          </button>)}{!visibleTables.length && <p className="schema-empty">没有匹配的物理表。</p>}</div>
+          <div className="schema-table-scroll">{visibleTables.map((table) => <button type="button" key={table.name} className={activeTable?.name === table.name ? 'active' : ''} onClick={() => chooseTable(table.name)}><TableProperties size={13} /><span className="schema-table-name">{table.name}</span></button>)}{!visibleTables.length && <p className="schema-empty">没有匹配的物理表。</p>}</div>
         </aside>
         <section className="schema-field-panel">
           {!activeTable ? <div className="schema-empty"><TableProperties size={26} /><strong>没有匹配的表结构</strong><p>调整搜索关键词或映射状态筛选。</p></div> : <>
@@ -240,6 +260,7 @@ function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
           </>}
         </section>
       </div>
+      </> : <SchemaDataPreview table={activeTable} preview={preview} busy={previewBusy} error={previewError} onRefresh={() => loadPreview(activeTable)} />}
     </div>}
   </Modal>;
 }
@@ -529,6 +550,8 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
     if (item.driver !== 'mysql') { notify?.('该数据源类型暂不支持直连测试，请导入 CSV/JSON/SQL 结构字典。'); return; }
     await sourceAction('test-connection', item);
   };
+  const loadTablePreview = (source, table, limit = 20) => api(`/api/ontologies/${activeId}/enterprise/data-sources/${source.id}/preview-table?table=${encodeURIComponent(table)}&limit=${limit}`);
+
   const viewMappingFromSchema = (mapping) => {
     if (!mapping) return;
     setSchemaModalOpen(false);
@@ -761,6 +784,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
       statusLabel={mappingStatusLabel}
       tab={sourceModalTab}
       onTabChange={changeSourceTab}
+      onPreview={loadTablePreview}
       detailContent={<SourceDetailContent
         source={sourceForDetail}
         tables={detailTables}

@@ -3711,3 +3711,49 @@ html, body, #root {
   .source-structure-metrics { width:70px; }
   .source-modal-tabs { margin-top:0; }
 }
+
+/* 表结构左栏：Navicat 风格，只显示物理表名 */
+.schema-browser-layout { grid-template-columns:190px minmax(0,1fr); }
+.schema-browser-layout.single-table { grid-template-columns:minmax(0,1fr); }
+.schema-table-list { background:#f7fafc; }
+.schema-table-scroll { padding:5px; }
+.schema-table-scroll button { min-height:31px; display:grid; grid-template-columns:16px minmax(0,1fr); align-items:center; gap:5px; padding:5px 7px; color:#536d80; background:transparent; border:1px solid transparent; border-radius:4px; text-align:left; cursor:pointer; }
+.schema-table-scroll button > svg { color:#7895a8; }
+.schema-table-scroll button:hover { background:#eef7fc; }
+.schema-table-scroll button.active { color:#1e5f87; background:#e8f4fb; border-color:#c5dfed; box-shadow:inset 2px 0 #2f7eae; }
+.schema-table-scroll button.active > svg { color:#2f7eae; }
+.schema-table-name { overflow:hidden; font-size:10.5px; font-weight:500; text-overflow:ellipsis; white-space:nowrap; }
+@media (max-width:1000px) {
+  .schema-browser-layout { grid-template-columns:180px minmax(0,1fr); }
+}
+
+/* 表结构：结构 / 数据预览子视图 */
+.schema-view-tabs { display:flex; align-items:center; gap:3px; padding:2px 0 0; border-bottom:1px solid #e1eaf0; }
+.schema-view-tabs button { min-height:32px; display:inline-flex; align-items:center; gap:4px; padding:0 9px; color:#6f8393; background:transparent; border:0; border-bottom:2px solid transparent; font-size:9px; cursor:pointer; }
+.schema-view-tabs button:hover { color:#2d6d94; }
+.schema-view-tabs button.active { color:#21698f; border-bottom-color:#2f7eae; font-weight:600; }
+.schema-view-tabs button:disabled { opacity:.45; cursor:not-allowed; }
+.schema-view-tabs > span { margin-left:auto; color:#96a5b0; font-size:8px; }
+.schema-data-view { flex:1; min-height:0; display:flex; flex-direction:column; overflow:hidden; border:1px solid #d7e3ec; border-radius:5px; background:#fff; }
+.schema-data-view > header { flex:none; min-height:50px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 11px; border-bottom:1px solid #e2eaf1; }
+.schema-data-view h3 { margin:0; color:#355a72; font-size:12px; }
+.schema-data-view p { margin:3px 0 0; color:#8498a7; font-size:8.5px; }
+.schema-data-refresh { min-height:27px; display:inline-flex; align-items:center; gap:4px; padding:0 7px; color:#2a6a93; background:#f4faff; border:1px solid #cfe3ef; border-radius:4px; font-size:8.5px; cursor:pointer; }
+.schema-data-refresh:disabled { opacity:.45; cursor:not-allowed; }
+.schema-data-table-wrap { flex:1; min-height:0; overflow:auto; }
+.schema-data-table { min-width:100%; border-collapse:separate; border-spacing:0; white-space:nowrap; }
+.schema-data-table th { position:sticky; top:0; z-index:1; min-width:110px; padding:7px 9px; color:#5e788a; background:#f5f9fb; border-bottom:1px solid #dce7ee; border-right:1px solid #edf2f5; font-size:8.5px; font-weight:600; text-align:left; }
+.schema-data-table td { max-width:260px; overflow:hidden; padding:7px 9px; color:#4b687c; border-bottom:1px solid #edf2f5; border-right:1px solid #f0f4f6; font-size:9px; text-overflow:ellipsis; }
+.schema-data-table tr:nth-child(even) td { background:#fcfdfe; }
+.schema-data-table tr:hover td { background:#f4fafd; }
+.schema-data-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; min-height:220px; padding:20px; color:#899ba8; text-align:center; }
+.schema-data-state strong { color:#536f83; font-size:10px; }
+.schema-data-state p { margin:0; color:#8195a4; font-size:9px; line-height:1.5; }
+.schema-data-state small { max-width:460px; color:#9ba9b3; font-size:8px; line-height:1.5; }
+.schema-data-state.error { color:#a56c45; background:#fffcf8; }
+.schema-data-state.error strong { color:#95633e; }
+.schema-data-footnote { flex:none; padding:6px 10px; color:#8b9ca8; background:#fbfdfe; border-top:1px solid #e5edf2; font-size:8px; }
+@media (max-width:700px) {
+  .schema-view-tabs > span { display:none; }
+  .schema-data-table th { min-width:90px; }
+}
