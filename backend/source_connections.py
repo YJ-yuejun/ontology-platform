@@ -15,6 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 import repository as repo
 
@@ -76,6 +77,55 @@ def has_password(source_id: str) -> bool:
     return bool(row)
 
 
+
+def parse_db_uri(value: str) -> Dict[str, Any]:
+    """Parse a db_uri without accepting embedded credentials.
+
+    Supported forms: mysql://host:3306/database, host:3306/database.
+    Credentials stay in the separate account/password fields.
+    """
+    raw = str(value or "").strip()
+    if not raw:
+        raise repo.ValidationError("请填写连接 URI")
+    if raw.startswith("jdbc:"):
+        raw = raw[5:]
+    scheme = ""
+    if "://" in raw:
+        try:
+            parsed = urlsplit(raw)
+            port = parsed.port
+        except ValueError as exc:
+            raise repo.ValidationError("连接 URI 格式无效，请检查端口") from exc
+        if parsed.username or parsed.password:
+            raise repo.ValidationError("账号和密码请使用独立字段，不要写入连接 URI")
+        scheme = parsed.scheme.lower().split("+", 1)[0]
+        host = parsed.hostname or ""
+        database = parsed.path.lstrip("/").split("?")[0]
+    else:
+        match = re.fullmatch(r"([^/:\s]+)(?::(\d+))?/([^/\s?]+)", raw)
+        if not match:
+            raise repo.ValidationError("连接 URI 格式应为 host:port/database 或 mysql://host:port/database")
+        host, port_text, database = match.group(1), match.group(2), match.group(3)
+        port = int(port_text) if port_text else None
+    if not host or not database:
+        raise repo.ValidationError("连接 URI 必须包含主机和数据库名")
+    if scheme and scheme not in {"mysql", "postgresql", "oracle", "sqlserver", "dameng"}:
+        raise repo.ValidationError("连接 URI 的驱动协议无效")
+    if port is None:
+        port = 3306 if (scheme or "mysql") == "mysql" else None
+    if port is not None and not 1 <= int(port) <= 65535:
+        raise repo.ValidationError("连接 URI 的端口须为 1–65535")
+    return {"scheme": scheme, "host": host, "port": port, "database": database}
+
+
+def legacy_db_uri(source: Dict[str, Any]) -> str:
+    if source.get("db_uri"):
+        return str(source["db_uri"])
+    if source.get("host") and source.get("database"):
+        return f"{source.get('host')}:{source.get('port') or 3306}/{source.get('database')}"
+    return ""
+
+
 def _source(ontology_id: str, source_id: str) -> Dict[str, Any]:
     conn = repo.get_conn()
     row = conn.execute("SELECT * FROM enterprise_data_sources WHERE id=? AND ontology_id=?", (source_id, ontology_id)).fetchone()
@@ -84,14 +134,23 @@ def _source(ontology_id: str, source_id: str) -> Dict[str, Any]:
         raise repo.NotFoundError("数据源不存在")
     data = dict(row)
     data.update(json.loads(data.pop("payload") or "{}"))
+    data["db_uri"] = legacy_db_uri(data)
     return data
 
 
 def _connect(source: Dict[str, Any]):
     if source.get("driver") != "mysql":
         raise repo.ValidationError("当前仅支持 MySQL 直连结构采集；其他来源可登记并导入数据字典")
-    required = {"host": "主机地址", "port": "端口", "database": "数据库名称", "username": "用户名"}
-    missing = [label for key, label in required.items() if not source.get(key)]
+    try:
+        parsed = parse_db_uri(source.get("db_uri") or legacy_db_uri(source))
+    except repo.ValidationError as exc:
+        raise repo.ValidationError(str(exc)) from exc
+    uri_scheme = str(parsed.get("scheme") or "")
+    if uri_scheme and source.get("driver") and uri_scheme != source.get("driver"):
+        raise repo.ValidationError("连接 URI 的驱动协议与驱动类型不一致")
+    required = {"host": "主机地址", "port": "端口", "database": "数据库名称", "username": "账号"}
+    normalized = {"host": parsed["host"], "port": parsed["port"], "database": parsed["database"], "username": source.get("username")}
+    missing = [label for key, label in required.items() if not normalized.get(key)]
     if missing:
         raise repo.ValidationError("连接配置缺少：" + "、".join(missing))
     if not has_password(source["id"]):
@@ -106,8 +165,8 @@ def _connect(source: Dict[str, Any]):
     password = _cipher().decrypt(row["password_token"].encode()).decode()
     try:
         return pymysql.connect(
-            host=source["host"], port=int(source["port"]), user=source["username"],
-            password=password, database=source["database"],
+            host=normalized["host"], port=int(normalized["port"]), user=normalized["username"],
+            password=password, database=normalized["database"],
             connect_timeout=5, read_timeout=8, write_timeout=8,
             charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor,
         )

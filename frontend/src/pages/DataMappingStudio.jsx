@@ -20,6 +20,7 @@ const databaseDrivers = [
   ['sqlserver', 'SQL Server'], ['dameng', '达梦数据库'],
 ];
 const driverLabel = (value) => databaseDrivers.find(([key]) => key === value)?.[1] || value || '未配置';
+const sourceDbUri = (item) => item?.db_uri || (item?.host ? `${item.driver || 'mysql'}://${item.host}:${item.port || 3306}/${item.database || ''}` : '');
 const sourceOptions = {
   system_type: ['业务系统', '实时系统', '资产管理', '资产系统', '监测系统', '财务系统', '主数据系统'],
   data_category: ['交易', '实时', '主数据', '交易数据', '时序数据', '分析数据', '文档数据'],
@@ -29,7 +30,7 @@ const sourceOptions = {
 const emptySource = () => ({ code: '', name: '', category: '', status: 'draft', description: '',
   system_type: '', physical_object: '', data_subject: '', data_scope: '', data_category: '',
   interface_type: '', update_frequency: '', subject_domain_code: '',
-  driver: '', host: '', port: '', database: '', username: '', password: '' });
+  driver: '', db_uri: '', username: '', password: '' });
 const emptyMapping = () => ({ code: '', name: '', status: 'experimental', design_status: '设计中', owner: '', description: '', mapping_type: 'property',
   binding_mode: 'direct', governance_asset_code: '', governance_field: '', governance_relation_fields: ['', ''],
   source_code: '', source_kind: 'table', source_table: '', source_field: '', source_key: '', target_key: '',
@@ -101,6 +102,7 @@ function SchemaDataPreview({ table, preview, busy, error, onRefresh }) {
 }
 
 function SourceDetailContent({ source, tables, totalFields, mappedFields, subjectName, capturedAt, busy, remoteTables, selectedTables, setSelectedTables, onTest, onBrowse, onImport, onViewMappings, onOpenSchema, onCaptureSchema, onEdit, onDelete }) {
+  const sourceUri = sourceDbUri(source);
   const coverage = totalFields ? Math.round((mappedFields / totalFields) * 100) : 0;
   const isMysql = source.driver === 'mysql';
   return <div className="source-detail-content">
@@ -129,7 +131,8 @@ function SourceDetailContent({ source, tables, totalFields, mappedFields, subjec
         <header><h3>连接与结构采集</h3><span>connection & schema</span></header>
         <dl>
           <div><dt>数据库类型</dt><dd>{driverLabel(source.driver)}</dd></div>
-          <div><dt>连接地址</dt><dd>{source.host ? <code>{source.host}:{source.port}/{source.database}</code> : '未配置'}</dd></div>
+          <div><dt>连接 URI</dt><dd title={sourceUri}>{sourceUri ? <code>{sourceUri}</code> : '未配置'}</dd></div>
+          <div><dt>账号</dt><dd>{source.username || '未配置'}</dd></div>
           <div><dt>凭据</dt><dd>{isMysql ? source.credential_configured ? '已安全保存' : '未配置' : '不适用'}</dd></div>
           <div><dt>连接检测</dt><dd>{isMysql ? source.connection_check?.status === 'passed' ? `通过 · ${formatTime(source.connection_check.checked_at)}` : '未检测' : '暂不支持直连'}</dd></div>
           <div><dt>结构快照</dt><dd>{source.schema_snapshot ? `${source.schema_snapshot.table_count} 张表 · ${formatTime(source.schema_snapshot.captured_at)}` : '未获取'}</dd></div>
@@ -449,7 +452,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
 
   const visible = useMemo(() => activeTab === 'sources'
     ? (sources || []).filter((item) => (driverFilter === 'all' || (driverFilter === 'none' ? !item.driver : item.driver === driverFilter))
-      && `${item.name} ${item.code} ${item.physical_object || ''} ${item.database || ''} ${item.system_type || ''} ${item.data_subject || ''} ${driverLabel(item.driver)}`.toLowerCase().includes(query.toLowerCase()))
+      && `${item.name} ${item.code} ${item.physical_object || ''} ${item.db_uri || ''} ${item.system_type || ''} ${item.data_subject || ''} ${driverLabel(item.driver)}`.toLowerCase().includes(query.toLowerCase()))
     : mappings.filter((item) => {
       const status = item.design_status || ({ draft: '设计中', experimental: '设计中', active: '已确认', deprecated: '已停用' })[item.status] || '待确认';
       const sourceCode = item.binding_mode === 'governed'
@@ -563,7 +566,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
     const legacySubjectCode = subjects.find((subject) => subject.code === item?.data_topic)?.code || '';
     setForm(item ? { ...emptySource(), ...item,
       data_subject: item.data_subject || (legacySubjectCode ? '' : item.data_topic) || '',
-      subject_domain_code: item.subject_domain_code || legacySubjectCode, password: '' } : emptySource());
+      subject_domain_code: item.subject_domain_code || legacySubjectCode, db_uri: sourceDbUri(item), password: '' } : emptySource());
   };
   const startMapping = (item = null) => {
     setEditor({ kind: 'mapping', item });
@@ -603,8 +606,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
         data_scope: form.data_scope.trim(), data_category: form.data_category.trim(),
         interface_type: form.interface_type.trim(), subject_domain_code: form.subject_domain_code || '',
         driver: form.driver,
-        host: form.driver === 'mysql' ? form.host : '', port: form.driver === 'mysql' ? Number(form.port) || null : null,
-        database: form.driver === 'mysql' ? form.database : '', username: form.driver === 'mysql' ? form.username : '',
+        db_uri: form.db_uri.trim(), username: form.username.trim(),
         ...(form.driver === 'mysql' && form.password ? { password: form.password } : {}),
         ...(form.driver === 'mysql' && form.connection_check ? { connection_check: form.connection_check } : {}) }
       : { ...preserved, design_status: form.design_status, owner: form.owner.trim(),
@@ -749,7 +751,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
       <PaginationBar page={currentPage} pageSize={pageSize} total={visible.length} onPageChange={setPage} onPageSizeChange={(size) => { setPageSize(size); setPage(1); }} /></div>
 
       <aside className="mapping-v2-inspector"><header><strong>{activeTab === 'sources' ? '数据源详情' : '映射详情'}</strong>{selectedDetail && <div><ResourceHistoryLink resourceType={selectedDetail.kind === 'source' ? 'data_source' : 'data_mapping'} resourceId={selectedDetail.item.id} /><button onClick={() => selectedDetail.kind === 'source' ? startSource(selectedDetail.item) : startMapping(selectedDetail.item)}><Pencil size={14} /> 编辑</button><button className="danger-link" onClick={() => remove(selectedDetail.kind, selectedDetail.item)}><Trash2 size={14} /> 删除</button><button className="mapping-detail-close" title="收起详情" aria-label="收起详情" onClick={() => setDetail(null)}><X size={14} /></button></div>}</header>
-      <div key={selectedDetail?.item.id || activeTab} className="mapping-drawer-body">{!selectedDetail ? <EmptyState title="请选择记录" description="从左侧目录选择一条记录查看详情。" /> : selectedDetail.kind === 'source' ? <><h3>{sourceForDetail.name}</h3>{sourceForDetail.source_origin === 'built_in_demo' && sourceForDetail.connection_check?.status !== 'passed' && <p>这是内置采购财务演示登记，不代表已接入真实系统。</p>}<h4>来源登记信息</h4><dl><div><dt>数据源ID</dt><dd>{sourceForDetail.code}</dd></div><div><dt>登记状态</dt><dd>{statusLabel(sourceForDetail.status)}</dd></div><div><dt>系统类型</dt><dd>{sourceForDetail.system_type || '—'}</dd></div><div><dt>数据库/接口/文件</dt><dd>{sourceForDetail.physical_object || '—'}</dd></div><div><dt>数据主题</dt><dd>{sourceForDetail.data_subject || '—'}</dd></div><div><dt>更新频率</dt><dd>{sourceForDetail.update_frequency || '—'}</dd></div><div><dt>数据范围</dt><dd>{sourceForDetail.data_scope || '—'}</dd></div><div><dt>数据类别</dt><dd>{sourceForDetail.data_category || '—'}</dd></div><div><dt>接口方式</dt><dd>{sourceForDetail.interface_type || '—'}</dd></div></dl><h4>本体分类关联（扩展配置）</h4><dl><div><dt>关联主题域</dt><dd>{subjects.find((item) => item.code === sourceForDetail.subject_domain_code)?.name || sourceForDetail.subject_domain_code || '未关联'}</dd></div></dl><h4>连接与结构采集（扩展配置）</h4><dl><div><dt>数据库类型</dt><dd>{driverLabel(sourceForDetail.driver)}</dd></div><div><dt>连接地址</dt><dd>{sourceForDetail.host ? `${sourceForDetail.host}:${sourceForDetail.port}/${sourceForDetail.database}` : '未配置'}</dd></div><div><dt>凭据</dt><dd>{sourceForDetail.driver === 'mysql' ? sourceForDetail.credential_configured ? '已安全保存' : '未配置' : '不适用'}</dd></div><div><dt>连接检测</dt><dd>{sourceForDetail.driver === 'mysql' ? sourceForDetail.connection_check?.status === 'passed' ? `通过 · ${formatTime(sourceForDetail.connection_check.checked_at)}` : '未检测' : '暂不支持直连'}</dd></div><div><dt>结构快照</dt><dd>{sourceForDetail.schema_snapshot ? `${sourceForDetail.schema_snapshot.table_count} 张表 · ${formatTime(sourceForDetail.schema_snapshot.captured_at)}` : '未获取'}</dd></div></dl>
+      <div key={selectedDetail?.item.id || activeTab} className="mapping-drawer-body">{!selectedDetail ? <EmptyState title="请选择记录" description="从左侧目录选择一条记录查看详情。" /> : selectedDetail.kind === 'source' ? <><h3>{sourceForDetail.name}</h3>{sourceForDetail.source_origin === 'built_in_demo' && sourceForDetail.connection_check?.status !== 'passed' && <p>这是内置采购财务演示登记，不代表已接入真实系统。</p>}<h4>来源登记信息</h4><dl><div><dt>数据源ID</dt><dd>{sourceForDetail.code}</dd></div><div><dt>登记状态</dt><dd>{statusLabel(sourceForDetail.status)}</dd></div><div><dt>系统类型</dt><dd>{sourceForDetail.system_type || '—'}</dd></div><div><dt>数据库/接口/文件</dt><dd>{sourceForDetail.physical_object || '—'}</dd></div><div><dt>数据主题</dt><dd>{sourceForDetail.data_subject || '—'}</dd></div><div><dt>更新频率</dt><dd>{sourceForDetail.update_frequency || '—'}</dd></div><div><dt>数据范围</dt><dd>{sourceForDetail.data_scope || '—'}</dd></div><div><dt>数据类别</dt><dd>{sourceForDetail.data_category || '—'}</dd></div><div><dt>接口方式</dt><dd>{sourceForDetail.interface_type || '—'}</dd></div></dl><h4>本体分类关联（扩展配置）</h4><dl><div><dt>关联主题域</dt><dd>{subjects.find((item) => item.code === sourceForDetail.subject_domain_code)?.name || sourceForDetail.subject_domain_code || '未关联'}</dd></div></dl><h4>连接与结构采集（扩展配置）</h4><dl><div><dt>数据库类型</dt><dd>{driverLabel(sourceForDetail.driver)}</dd></div><div><dt>连接 URI</dt><dd>{sourceDbUri(sourceForDetail) || '未配置'}</dd></div><div><dt>账号</dt><dd>{sourceForDetail.username || '未配置'}</dd></div><div><dt>凭据</dt><dd>{sourceForDetail.driver === 'mysql' ? sourceForDetail.credential_configured ? '已安全保存' : '未配置' : '不适用'}</dd></div><div><dt>连接检测</dt><dd>{sourceForDetail.driver === 'mysql' ? sourceForDetail.connection_check?.status === 'passed' ? `通过 · ${formatTime(sourceForDetail.connection_check.checked_at)}` : '未检测' : '暂不支持直连'}</dd></div><div><dt>结构快照</dt><dd>{sourceForDetail.schema_snapshot ? `${sourceForDetail.schema_snapshot.table_count} 张表 · ${formatTime(sourceForDetail.schema_snapshot.captured_at)}` : '未获取'}</dd></div></dl>
         <div className="mapping-drawer-actions">{sourceForDetail.driver === 'mysql' && <button disabled={Boolean(busy)} onClick={() => sourceAction('test-connection', sourceForDetail)}><CheckCircle2 size={15} /> 测试连接</button>}{sourceForDetail.driver === 'mysql' && <button disabled={Boolean(busy) || sourceForDetail.connection_check?.status !== 'passed'} onClick={() => browseTables(sourceForDetail)}><Database size={15} /> 选择/刷新来源表</button>}<label className="mapping-upload"><FileUp size={15} /> 导入结构文件<input type="file" accept={sourceForDetail.driver && sourceForDetail.driver !== "mysql" ? ".csv,.json" : ".csv,.json,.sql"} hidden onChange={(event) => { importDictionary(event.target.files?.[0], sourceForDetail); event.target.value = ''; }} /></label><button onClick={() => navigate(`/ontology/data/mappings?source=${encodeURIComponent(sourceForDetail.code)}`)}><ArrowRight size={15} /> 查看字段映射</button></div>
         {remoteTables.length > 0 && <section className="mapping-remote-tables"><h4>选择要采集结构的物理表</h4><p>这里只采集选中表的结构，不读取业务行。</p><div>{remoteTables.map((table) => <label key={table.name}><input type="checkbox" checked={selectedTables.includes(table.name)} onChange={() => setSelectedTables((old) => old.includes(table.name) ? old.filter((name) => name !== table.name) : [...old, table.name])} /><span>{table.name}</span><small>{table.comment}</small></label>)}</div><button disabled={!selectedTables.length || Boolean(busy)} onClick={() => sourceAction('capture-schema', sourceForDetail, { table_names: selectedTables })}>获取所选 {selectedTables.length} 张表的结构</button></section>}
         <section className="mapping-schema"><div className="mapping-schema-head"><h4>已获取的表结构</h4>{detailTables.length > 0 && <button type="button" className="mapping-schema-expand" onClick={openSchema}>展开完整结构 <ChevronRight size={14} /></button>}</div>{schemaCapturedAt && <p>结构快照：{formatTime(schemaCapturedAt)}。这里只展示字段元数据，不读取业务记录。</p>}{detailTables.length ? <button type="button" className="mapping-schema-summary" onClick={openSchema}><span className="mapping-schema-summary-icon"><TableProperties size={18} /></span><span><strong>{detailTables.length} 张表 · {schemaFieldCount} 个字段</strong><small>{schemaMappedFieldCount} 个字段已映射 · 覆盖率 {schemaCoverage}%</small></span><span className="mapping-schema-coverage"><i><b style={{ width: `${schemaCoverage}%` }} /></i><em>{schemaCoverage}%</em></span><ChevronRight size={15} /></button> : <p>尚无结构快照。MySQL 可直连采集；其他类型请导入含表名、字段名、数据类型的 CSV、JSON 或 SQL 数据字典。</p>}</section></>
@@ -820,16 +822,12 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
         <DictionaryField kind="data_category" label="数据类别" required={!editor.item} value={form.data_category || ''} valueMode="name" onChange={(value) => setForm({ ...form, data_category: value })} />
         <DictionaryField kind="interface_type" label="接口方式" required={!editor.item} value={form.interface_type || ''} valueMode="name" onChange={(value) => setForm({ ...form, interface_type: value })} />
       </div></div>
-        <div className="form-section"><h3>数据库类型与结构获取</h3><p className="form-hint">数据库类型属于连接配置，不改变上面的登记字段。目前仅 MySQL 支持直连获取表结构；其余类型可登记并导入 CSV、JSON 或 SQL 数据字典。</p><div className="form-grid two">
-          <label><span>数据库类型</span><select value={form.driver || ''} onChange={(event) => setForm({ ...form, driver: event.target.value, port: event.target.value === 'mysql' ? form.port || 3306 : '' })}><option value="">暂不指定</option>{databaseDrivers.map(([key, label]) => <option key={key} value={key}>{label}</option>)}{form.driver && !databaseDrivers.some(([key]) => key === form.driver) && <option value={form.driver}>{form.driver}（已有值）</option>}</select></label>
+        <div className="form-section"><h3>连接配置</h3><p className="form-hint">只保留驱动类型、连接 URI、账号、密码四项。端口和数据库名写在 URI 中；目前仅 MySQL 支持直连测试与结构采集，其余驱动可登记后导入结构字典。</p><div className="form-grid two">
+          <label><span>驱动类型</span><select value={form.driver || ''} onChange={(event) => setForm({ ...form, driver: event.target.value })}><option value="">暂不指定</option>{databaseDrivers.map(([key, label]) => <option key={key} value={key}>{label}</option>)}{form.driver && !databaseDrivers.some(([key]) => key === form.driver) && <option value={form.driver}>{form.driver}（已有值）</option>}</select></label>
+          <label><span>连接 URI</span><input className="mono" required={form.driver === 'mysql'} value={form.db_uri || ''} onChange={(event) => setForm({ ...form, db_uri: event.target.value })} placeholder="mysql://db.example.com:3306/procurement" spellCheck="false" /><small>格式 mysql://host:port/database；账号密码使用下方独立字段。</small></label>
+          <label><span>账号</span><input required={form.driver === 'mysql'} value={form.username || ''} onChange={(event) => setForm({ ...form, username: event.target.value })} placeholder="数据库账号" autoComplete="username" /></label>
+          <label><span>密码</span><input type="password" autoComplete="new-password" required={!editor.item || !form.credential_configured} value={form.password || ''} placeholder={form.credential_configured ? '已配置；留空表示不修改' : '输入连接密码'} onChange={(event) => setForm({ ...form, password: event.target.value })} /><small>密码加密保存，不进入本体元数据或导出文件。</small></label>
           {form.driver && form.driver !== 'mysql' && <p className="mapping-driver-note">{driverLabel(form.driver)} 暂不支持直连测试与采集。保存登记信息后，请在详情中导入 CSV 或 JSON 结构文件。</p>}
-          {form.driver === 'mysql' && <>
-            <label><span>主机地址</span><input required value={form.host || ''} onChange={(event) => setForm({ ...form, host: event.target.value })} /></label>
-            <label><span>端口</span><input type="number" min="1" max="65535" required value={form.port ?? ''} onChange={(event) => setForm({ ...form, port: event.target.value })} /></label>
-            <label><span>数据库名称</span><input required value={form.database || ''} onChange={(event) => setForm({ ...form, database: event.target.value })} /></label>
-            <label><span>用户名</span><input required value={form.username || ''} onChange={(event) => setForm({ ...form, username: event.target.value })} /></label>
-            <label><span>密码</span><input type="password" autoComplete="new-password" required={!editor.item || !form.credential_configured} value={form.password || ''} placeholder={form.credential_configured ? '已配置；留空表示不修改' : '输入连接密码'} onChange={(event) => setForm({ ...form, password: event.target.value })} /><small>密码加密保存，不进入本体元数据或导出文件。</small></label>
-          </>}
         </div></div></>
         : <><section className="form-section"><h3>物理来源</h3><p className="form-hint">直接选择来源系统、物理表和字段；这是图谱左侧连线的起点。<button type="button" className="mapping-inline-action" onClick={() => { setEditor(null); navigate('/ontology/data/sources'); }}>先登记物理来源</button></p><div className="form-grid two">
           <MappingSourceFields form={form} setForm={setForm} sources={sources || []} tables={tables} objects={objects} relation={links.find((item) => item.name === form.target_relation)} />

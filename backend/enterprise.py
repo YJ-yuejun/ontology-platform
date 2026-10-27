@@ -506,15 +506,14 @@ def _validate_data_source(payload: Dict[str, Any]) -> None:
     if payload.get("driver") and payload["driver"] not in supported_drivers:
         raise repo.ValidationError("数据库类型只支持 MySQL、PostgreSQL、Oracle、SQL Server、达梦数据库的登记")
     if payload.get("driver") == "mysql":
-        required = {"host": "主机地址", "port": "端口", "database": "数据库名称", "username": "用户名"}
-        missing = [label for key, label in required.items() if not payload.get(key)]
-        if missing:
-            raise repo.ValidationError("MySQL 连接配置缺少：" + "、".join(missing))
+        if not payload.get("db_uri") and not (payload.get("host") and payload.get("database")):
+            raise repo.ValidationError("MySQL 连接配置缺少连接 URI")
+        if not payload.get("username"):
+            raise repo.ValidationError("MySQL 连接配置缺少账号")
         try:
-            if not 1 <= int(payload["port"]) <= 65535:
-                raise ValueError()
-        except (TypeError, ValueError) as exc:
-            raise repo.ValidationError("端口须为 1–65535 的整数") from exc
+            source_connections.parse_db_uri(payload.get("db_uri") or f"{payload.get('host')}:{payload.get('port') or 3306}/{payload.get('database')}")
+        except repo.ValidationError:
+            raise
 
 
 def _validate_governance_asset(ontology_id: str, payload: Dict[str, Any]) -> None:
@@ -711,7 +710,7 @@ def save_resource(ontology_id: str, kind: str, data: EnterpriseResourceBase, res
         # A changed endpoint or identity invalidates any previous connection check.
         if resource_id:
             old = get_resource(ontology_id, kind, resource_id)
-            identity = ("driver", "host", "port", "database", "username")
+            identity = ("driver", "db_uri", "username")
             if source_password or any(str(old.get(key) or "") != str(payload.get(key) or "") for key in identity):
                 payload.pop("connection_check", None)
         else:
