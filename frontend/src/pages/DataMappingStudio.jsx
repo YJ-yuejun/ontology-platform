@@ -87,7 +87,64 @@ function SchemaBrowser({ tables, query, onQueryChange, onPick, selectedTable = '
 }
 
 
-function SchemaDetailModal({ source, tables, mappings, capturedAt, getOrigin, targetLabel, propertyLabel, statusLabel, onClose, onViewMapping, onCreateMapping }) {
+function SourceDetailContent({ source, tables, totalFields, mappedFields, subjectName, capturedAt, busy, remoteTables, selectedTables, setSelectedTables, onTest, onBrowse, onImport, onViewMappings, onOpenSchema, onCaptureSchema, onEdit, onDelete }) {
+  const coverage = totalFields ? Math.round((mappedFields / totalFields) * 100) : 0;
+  const isMysql = source.driver === 'mysql';
+  return <div className="source-detail-content">
+    <div className="source-detail-summary">
+      <div><small>登记状态</small><b className="source-summary-main">{statusLabel(source.status)}</b><span>{source.source_origin === 'built_in_demo' ? '内置演示登记' : '企业来源登记'}</span></div>
+      <div><small>系统类型</small><b>{source.system_type || '未填写'}</b><span>{source.interface_type || '接口方式未填写'}</span></div>
+      <div><small>数据库类型</small><b>{driverLabel(source.driver)}</b><span>{isMysql ? '支持直连测试' : '暂不支持直连测试'}</span></div>
+      <div><small>关联主题域</small><b>{subjectName || '未关联'}</b><span>{source.data_subject || '数据主题未填写'}</span></div>
+      <div><small>结构快照</small><b>{tables.length} 张表</b><span>{capturedAt ? formatTime(capturedAt) : '尚未获取'}</span></div>
+    </div>
+    <div className="source-detail-grid">
+      <section className="source-detail-card">
+        <header><h3>来源登记信息</h3><span>source registration</span></header>
+        <dl>
+          <div><dt>数据源ID</dt><dd><code>{source.code}</code></dd></div>
+          <div><dt>系统名称</dt><dd>{source.name || '—'}</dd></div>
+          <div><dt>数据库／接口／文件</dt><dd>{source.physical_object || '—'}</dd></div>
+          <div><dt>数据主题</dt><dd>{source.data_subject || '—'}</dd></div>
+          <div><dt>更新频率</dt><dd>{source.update_frequency || '—'}</dd></div>
+          <div><dt>数据范围</dt><dd>{source.data_scope || '—'}</dd></div>
+          <div><dt>数据类别</dt><dd>{source.data_category || '—'}</dd></div>
+          <div><dt>接口方式</dt><dd>{source.interface_type || '—'}</dd></div>
+        </dl>
+      </section>
+      <section className="source-detail-card">
+        <header><h3>连接与结构采集</h3><span>connection & schema</span></header>
+        <dl>
+          <div><dt>数据库类型</dt><dd>{driverLabel(source.driver)}</dd></div>
+          <div><dt>连接地址</dt><dd>{source.host ? <code>{source.host}:{source.port}/{source.database}</code> : '未配置'}</dd></div>
+          <div><dt>凭据</dt><dd>{isMysql ? source.credential_configured ? '已安全保存' : '未配置' : '不适用'}</dd></div>
+          <div><dt>连接检测</dt><dd>{isMysql ? source.connection_check?.status === 'passed' ? `通过 · ${formatTime(source.connection_check.checked_at)}` : '未检测' : '暂不支持直连'}</dd></div>
+          <div><dt>结构快照</dt><dd>{source.schema_snapshot ? `${source.schema_snapshot.table_count} 张表 · ${formatTime(source.schema_snapshot.captured_at)}` : '未获取'}</dd></div>
+          <div><dt>同步方式</dt><dd>{source.sync_mode || '手工/扩展配置'}</dd></div>
+        </dl>
+        <div className="source-detail-connection-actions">
+          <button type="button" className="mapping-primary" onClick={onTest} disabled={Boolean(busy) || !isMysql} title={isMysql ? '测试数据库连接' : '仅 MySQL 支持直连测试'}><CheckCircle2 size={14} /> 测试连接</button>
+          <button type="button" className="mapping-secondary" onClick={onBrowse} disabled={Boolean(busy) || !isMysql}><Database size={14} /> 选择／刷新来源表</button>
+          <label className="mapping-secondary source-import-button"><FileUp size={14} /> 导入结构文件<input type="file" accept=".csv,.json,.sql" hidden onChange={(event) => { const file = event.target.files?.[0]; if (file) onImport(file); event.target.value = ''; }} /></label>
+        </div>
+      </section>
+    </div>
+    <section className="source-structure-card">
+      <div className="source-structure-copy"><span className="source-structure-icon"><TableProperties size={19} /></span><div><h3>已获取的表结构</h3><p>{tables.length ? `${tables.length} 张表 · ${totalFields} 个字段 · ${mappedFields} 个字段已映射` : '尚未获取结构快照，可在上方选择来源表或导入结构文件。'}</p></div></div>
+      <div className="source-structure-metrics"><strong>{coverage}%</strong><span>字段覆盖率</span><i><b style={{ width: `${coverage}%` }} /></i></div>
+      <button type="button" className="mapping-secondary" onClick={onOpenSchema} disabled={!tables.length}>查看表结构 <ArrowRight size={14} /></button>
+    </section>
+    {remoteTables.length > 0 && <section className="mapping-remote-tables source-detail-remote"><h4>选择要采集结构的物理表</h4><p>这里只采集选中表的结构，不读取业务行。</p><div>{remoteTables.map((table) => <label key={table.name}><input type="checkbox" checked={selectedTables.includes(table.name)} onChange={() => setSelectedTables((old) => old.includes(table.name) ? old.filter((name) => name !== table.name) : [...old, table.name])} /><span>{table.name}</span><small>{table.comment}</small></label>)}</div><button disabled={!selectedTables.length || Boolean(busy)} onClick={onCaptureSchema}>获取所选 {selectedTables.length} 张表的结构</button></section>}
+    <div className="source-detail-actions">
+      <ResourceHistoryLink resourceType="data_source" resourceId={source.id} />
+      <button type="button" className="mapping-secondary" onClick={onViewMappings}><ArrowRight size={14} /> 查看字段映射</button>
+      <button type="button" className="mapping-secondary" onClick={onEdit}><Pencil size={14} /> 编辑数据源</button>
+      <button type="button" className="mapping-danger" onClick={onDelete}><Trash2 size={14} /> 删除</button>
+    </div>
+  </div>;
+}
+
+function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, targetLabel, propertyLabel, statusLabel, onClose, onViewMapping, onCreateMapping, tab = 'schema', onTabChange, detailContent }) {
   const [query, setQuery] = useState('');
   const [mappingFilter, setMappingFilter] = useState('all');
   const [selectedTable, setSelectedTable] = useState(tables[0]?.name || '');
@@ -133,8 +190,9 @@ function SchemaDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
   const mappedTables = tableRows.filter((table) => table.mapped > 0).length;
   const statusClass = (value) => value === '已确认' ? 'confirmed' : value === '已停用' ? 'disabled' : 'pending';
   const fieldEntries = (table, column) => mappedIndex.get(`${table.name}\u0000${column.name}`) || [];
-  return <Modal extraWide title={`表结构 · ${source.name}`} subtitle={`${source.code} · ${tables.length} 张表 · ${totalFields} 个字段${capturedAt ? ` · 快照 ${formatTime(capturedAt)}` : ''}`} onClose={onClose} footer={<><span className="schema-modal-footnote">结构快照只读；映射状态来自数据映射页，字段映射仍在数据映射中维护。</span><button type="button" className="btn secondary" onClick={onClose}>关闭</button></>}>
-    <div className="schema-browser-modal">
+  return <Modal wide={tab === 'detail'} extraWide={tab === 'schema'} title={source.name} subtitle={`${source.code} · ${source.system_type || '未分类'} · ${driverLabel(source.driver)}`} onClose={onClose} footer={<><span className="schema-modal-footnote">{tab === 'detail' ? '数据源信息来自登记与结构采集；映射状态来自数据映射页。' : '结构快照只读；映射状态来自数据映射页，字段映射仍在数据映射中维护。'}</span><button type="button" className="btn secondary" onClick={onClose}>关闭</button></>}>
+    <nav className="source-modal-tabs" aria-label="数据源详情与表结构"><button type="button" className={tab === 'detail' ? 'active' : ''} onClick={() => onTabChange('detail')}>数据源详情</button><button type="button" className={tab === 'schema' ? 'active' : ''} onClick={() => onTabChange('schema')}>表结构 <em>{tables.length}</em></button></nav>
+    {tab === 'detail' ? detailContent : <div className="schema-browser-modal">
       <div className="schema-browser-stats">
         <div><small>物理表</small><b>{tables.length}</b><span>{mappedTables} 张已有映射</span></div>
         <div><small>字段</small><b>{totalFields}</b><span>来自结构快照</span></div>
@@ -182,7 +240,7 @@ function SchemaDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
           </>}
         </section>
       </div>
-    </div>
+    </div>}
   </Modal>;
 }
 
@@ -220,6 +278,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
   const [selectedTables, setSelectedTables] = useState([]);
   const [validation, setValidation] = useState(null);
   const [schemaModalOpen, setSchemaModalOpen] = useState(false);
+  const [sourceModalTab, setSourceModalTab] = useState('detail');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const { items: mappingWays } = useModelDictionary('mapping_way');
@@ -349,7 +408,8 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
     return () => { cancelled = true; };
   }, [activeId, graphRelease]);
   useEffect(() => { setPage(1); }, [activeTab, mappingTab, mappingStatusFilter, sourceFilter, driverFilter, query, pageSize]);
-  useEffect(() => { setRemoteTables([]); setSelectedTables([]); setSchemaModalOpen(false); }, [detail?.item?.id]);
+  useEffect(() => { setRemoteTables([]); setSelectedTables([]); }, [detail?.item?.id]);
+  useEffect(() => { if (activeTab !== 'sources') setSchemaModalOpen(false); }, [activeTab]);
   useEffect(() => { setSchemaQuery(''); }, [detail?.item?.id]);
   useEffect(() => { setValidation(null); }, [detail?.item?.id, activeTab]);
 
@@ -437,22 +497,33 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
   })).size;
   const schemaCoverage = schemaFieldCount ? Math.round((schemaMappedFieldCount / schemaFieldCount) * 100) : 0;
   const schemaCapturedAt = schemas[sourceForDetail?.code]?.captured_at || sourceForDetail?.schema_snapshot?.captured_at || '';
-  const openSchema = () => setSchemaModalOpen(true);
+  const openSchema = () => { setSourceModalTab('schema'); setSchemaModalOpen(true); };
+  const openSourceDetail = (item) => {
+    setDetail({ kind: 'source', item });
+    setSourceModalTab('detail');
+    setSchemaModalOpen(true);
+    if (item.schema_snapshot && !schemas[item.code]?.schema?.tables?.length) ensureSchema(item.code);
+  };
   const openSourceSchema = async (item) => {
     setDetail({ kind: 'source', item });
+    setSourceModalTab('schema');
     let schema = schemas[item.code];
     if (!schema?.schema?.tables?.length) {
       try {
         schema = await api(`/api/ontologies/${activeId}/enterprise/data-sources/${item.id}/schema`);
         setSchemas((old) => ({ ...old, [item.code]: schema }));
       } catch (cause) {
+        setSchemaModalOpen(true);
         notify?.(cause.message);
         return;
       }
     }
-    const tables = schema?.schema?.tables || [];
-    if (!tables.length) { notify?.('该数据源尚未获取表结构，请先在详情中采集或导入结构。'); return; }
     setSchemaModalOpen(true);
+  };
+  const closeSourceModal = () => { setSchemaModalOpen(false); setSourceModalTab('detail'); setDetail(null); };
+  const changeSourceTab = (tab) => {
+    setSourceModalTab(tab);
+    if (tab === 'schema' && sourceForDetail && sourceForDetail.schema_snapshot && !schemas[sourceForDetail.code]?.schema?.tables?.length) ensureSchema(sourceForDetail.code);
   };
   const testSourceConnection = async (item) => {
     if (item.driver !== 'mysql') { notify?.('该数据源类型暂不支持直连测试，请导入 CSV/JSON/SQL 结构字典。'); return; }
@@ -635,10 +706,10 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
         {activeTab === 'mappings' && <><button className="mapping-secondary" onClick={() => navigate('/ontology/data/mapping-graph')}><Network size={15} /> 映射图谱</button><button className="mapping-primary" onClick={() => startMapping()}><Plus size={16} /> 新建字段映射</button></>}
       </div>
     </div>
-    <div className={`mapping-v2-layout ${selectedDetail ? 'detail-open' : 'detail-collapsed'}`}>
+    <div className={`mapping-v2-layout ${activeTab === 'sources' || !selectedDetail ? 'detail-collapsed' : 'detail-open'}`}>
       <div className="mapping-v2-list-pane"><div className="mapping-v2-pane-heading"><strong>{activeTab === 'sources' ? '数据源目录' : '数据映射目录'}</strong><span>{activeTab === 'mappings' ? '每条映射直接连接物理字段与本体对象属性' : '登记连接、采集结构，作为字段映射的起点'}</span></div>
       {activeTab === 'sources' ? <section className="mapping-v2-table source-list"><header><span>系统名称 / 数据源ID</span><span>类型</span><span>数据库类型</span><span>状态</span><span>操作</span></header>
-        {rows.map((item) => <div key={item.id} role="button" tabIndex={0} className={`mapping-source-row ${detail?.item?.id === item.id ? 'selected' : ''}`} onClick={() => setDetail({ kind: 'source', item })} onKeyDown={(event) => { if (event.key === 'Enter') setDetail({ kind: 'source', item }); }}>
+        {rows.map((item) => <div key={item.id} role="button" tabIndex={0} className={`mapping-source-row ${detail?.item?.id === item.id ? 'selected' : ''}`} onClick={() => openSourceDetail(item)} onKeyDown={(event) => { if (event.key === 'Enter') setDetail({ kind: 'source', item }); }}>
           <span><strong>{item.name}</strong><small>{item.code}{item.source_origin === 'built_in_demo' && item.connection_check?.status !== 'passed' ? ' · 演示登记' : ''}</small></span>
           <span title={item.system_type || ''}>{item.system_type || '未填写'}</span>
           <span title={driverLabel(item.driver)}>{item.driver ? driverLabel(item.driver) : '未指定'}</span>
@@ -679,7 +750,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
           <div className="mapping-drawer-actions"><button disabled={Boolean(busy)} onClick={() => validate(selectedDetail.item)}><CheckCircle2 size={15} /> 校验映射配置</button></div>{validation && <section className="mapping-validation"><h4>{validation.status === 'valid' ? '静态校验通过' : validation.status === 'error' ? '发现阻断问题' : '存在待确认项'}</h4><p>仅核对模型与已有元数据，不读取业务数据；校验于 {formatTime(validation.checked_at)}。</p>{validation.checks.map((item, index) => <div key={`${item.name}-${index}`} className={item.level}><strong>{item.name}</strong><span>{item.detail}</span><em>{({ ok: '通过', error: '错误', warning: '警告', pending: '待验证' })[item.level]}</em></div>)}</section>}</>}
       </div></aside></div></>}
 
-    {schemaModalOpen && sourceForDetail && detailTables.length > 0 && <SchemaDetailModal
+    {schemaModalOpen && sourceForDetail && <SourceDetailModal
       source={sourceForDetail}
       tables={detailTables}
       mappings={sourceSchemaMappings}
@@ -688,7 +759,29 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
       targetLabel={mappingTargetLabel}
       propertyLabel={mappingPropertyLabel}
       statusLabel={mappingStatusLabel}
-      onClose={() => setSchemaModalOpen(false)}
+      tab={sourceModalTab}
+      onTabChange={changeSourceTab}
+      detailContent={<SourceDetailContent
+        source={sourceForDetail}
+        tables={detailTables}
+        totalFields={schemaFieldCount}
+        mappedFields={schemaMappedFieldCount}
+        subjectName={subjects.find((item) => item.code === sourceForDetail.subject_domain_code)?.name || ''}
+        capturedAt={schemaCapturedAt}
+        busy={busy}
+        remoteTables={remoteTables}
+        selectedTables={selectedTables}
+        setSelectedTables={setSelectedTables}
+        onTest={() => sourceAction('test-connection', sourceForDetail)}
+        onBrowse={() => browseTables(sourceForDetail)}
+        onImport={(file) => importDictionary(file, sourceForDetail)}
+        onViewMappings={() => { closeSourceModal(); navigate(`/ontology/data/mappings?source=${encodeURIComponent(sourceForDetail.code)}`); }}
+        onOpenSchema={() => changeSourceTab('schema')}
+        onCaptureSchema={() => sourceAction('capture-schema', sourceForDetail, { table_names: selectedTables })}
+        onEdit={() => { const item = sourceForDetail; closeSourceModal(); startSource(item); }}
+        onDelete={() => { const item = sourceForDetail; closeSourceModal(); remove('source', item); }}
+      />}
+      onClose={closeSourceModal}
       onViewMapping={viewMappingFromSchema}
       onCreateMapping={(table, column) => startMappingFromField(sourceForDetail, table, column)}
     />}
