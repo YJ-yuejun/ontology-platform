@@ -707,6 +707,9 @@ def save_resource(ontology_id: str, kind: str, data: EnterpriseResourceBase, res
             connection = dict(payload.pop("connection"))
             source_password = connection.pop("password", source_password)
             payload.update(connection)
+        if payload.get("db_uri"):
+            for legacy_key in ("host", "port", "database"):
+                payload.pop(legacy_key, None)
         # A changed endpoint or identity invalidates any previous connection check.
         if resource_id:
             old = get_resource(ontology_id, kind, resource_id)
