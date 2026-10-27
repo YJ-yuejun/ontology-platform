@@ -90,7 +90,7 @@ function SchemaBrowser({ tables, query, onQueryChange, onPick, selectedTable = '
 function SchemaDataPreview({ table, preview, busy, error, onRefresh }) {
   const format = (value) => value === null || value === undefined || value === '' ? '—' : String(value);
   return <div className="schema-data-view">
-    <header><div><h3>{table?.name || '数据预览'}</h3><p>只读预览 · 最多 20 行 · 用于确认表结构如何承载数据</p></div><button type="button" className="schema-data-refresh" onClick={onRefresh} disabled={busy || !table}><RefreshCw size={14} /> 刷新</button></header>
+    <header><div><h3>{table?.name || '数据预览'}</h3><p>只读预览 · 最多 20 行 · 受数据源读取权限约束</p></div><button type="button" className="schema-data-refresh" onClick={onRefresh} disabled={busy || !table}><RefreshCw size={14} /> 刷新</button></header>
     {busy ? <div className="schema-data-state"><LoaderCircle className="spin" size={20} /><strong>正在读取样例数据…</strong></div>
       : error ? <div className="schema-data-state error"><AlertTriangle size={20} /><strong>暂时无法预览数据</strong><p>{error}</p><small>需要先建立可读连接并测试通过；本视图不会读取或修改业务数据。</small></div>
         : !preview ? <div className="schema-data-state"><TableProperties size={22} /><strong>还没有预览数据</strong><p>点击刷新读取该表前 20 行。</p></div>
@@ -232,15 +232,15 @@ function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
           <button type="button" className={mappingFilter === 'mapped' ? 'active' : ''} onClick={() => setMappingFilter('mapped')}>已映射 <b>{mappedFields}</b></button>
           <button type="button" className={mappingFilter === 'unmapped' ? 'active' : ''} onClick={() => setMappingFilter('unmapped')}>未映射 <b>{Math.max(0, totalFields - mappedFields)}</b></button>
         </div>
-        <span className="schema-toolbar-note">字段状态来自数据映射</span>
+        <span className="schema-toolbar-note">映射状态仅限当前本体</span>
       </div>
-      <div className={`schema-browser-layout ${tables.length <= 1 ? 'single-table' : ''}`}>
+      <div className="schema-browser-layout">
         <aside className="schema-table-list">
           <div className="schema-table-scroll">{visibleTables.map((table) => <button type="button" key={table.name} className={activeTable?.name === table.name ? 'active' : ''} onClick={() => chooseTable(table.name)}><TableProperties size={13} /><span className="schema-table-name">{table.name}</span></button>)}{!visibleTables.length && <p className="schema-empty">没有匹配的物理表。</p>}</div>
         </aside>
         <section className="schema-field-panel">
           {!activeTable ? <div className="schema-empty"><TableProperties size={26} /><strong>没有匹配的表结构</strong><p>调整搜索关键词或映射状态筛选。</p></div> : <>
-            <header><div><h3>{activeTable.name}</h3><p>{activeTable.comment || '暂无表注释'} · {activeTable.columns.length} 个字段 · {activeTable.mapped} 个已映射</p></div><div className="schema-field-head-actions"><span className="schema-field-count"><b>{activeTable.columns.length}</b> 字段 <em>{activeTable.mapped} 已映射</em></span><button type="button" onClick={() => onCreateMapping(activeTable, null)}><Plus size={14} /> 新建字段映射</button></div></header>
+            <header><div><h3>{activeTable.name}</h3><p>{activeTable.comment || '暂无表注释'} · {activeTable.columns.length} 个字段 · {activeTable.mapped} 个已映射</p></div><div className="schema-field-head-actions"><span className="schema-field-count"><b>{activeTable.columns.length}</b> 字段 <em>{activeTable.mapped} 已映射</em><span className="schema-scope-chip">当前本体</span></span><button type="button" onClick={() => onCreateMapping(activeTable, null)}><Plus size={14} /> 新建字段映射</button></div></header>
             <div className="schema-field-table-wrap"><table className="schema-field-table"><colgroup><col style={{ width: '20%' }} /><col style={{ width: '13%' }} /><col style={{ width: '9%' }} /><col style={{ width: '8%' }} /><col style={{ width: '18%' }} /><col style={{ width: '12%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} /></colgroup><thead><tr><th>字段</th><th>类型</th><th>键</th><th>可空</th><th>注释</th><th>映射状态</th><th>映射目标</th><th>操作</th></tr></thead><tbody>
               {fields.map((column) => {
                 const entries = fieldEntries(activeTable, column);
@@ -251,7 +251,7 @@ function SourceDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
                   <td>{column.key === 'PRI' ? <em className="schema-key">主键</em> : column.key === 'UNI' ? <em className="schema-key">唯一</em> : '—'}</td>
                   <td>{column.nullable === false ? '否' : column.nullable === true ? '是' : '—'}</td>
                   <td title={column.comment || ''}><span className="schema-comment">{column.comment || '—'}</span></td>
-                  <td>{entries.length ? <span className={`schema-map-state ${statusClass(statusLabel(first))}`}>{statusLabel(first)}{entries.length > 1 ? ` · ${entries.length} 条` : ''}</span> : <span className="schema-map-state none">未映射</span>}</td>
+                  <td>{entries.length ? <span className={`schema-map-state ${statusClass(statusLabel(first))}`}>{statusLabel(first)}{entries.length > 1 ? ` · ${entries.length} 条` : ''}</span> : <span className="schema-map-state none" title="当前本体尚未建立映射；不展示其他本体的映射目标">当前未映射</span>}</td>
                   <td title={first ? `${targetLabel(first)} · ${propertyLabel(first)}` : ''}><span className="schema-target">{first ? `${targetLabel(first)} · ${propertyLabel(first)}` : '—'}</span></td>
                   <td>{entries.length ? <button type="button" className="schema-view" onClick={() => onViewMapping(first)}>查看</button> : <button type="button" className="schema-create" onClick={() => onCreateMapping(activeTable, column)}>建立</button>}</td>
                 </tr>;
@@ -510,7 +510,7 @@ export default function DataMappingStudio({ activeId, refreshOntologies, notify,
   const mappingWayLabel = (item) => mappingWays.find((row) => row.code === item.map_way)?.name || item.map_way || '—';
   const mappingStatusLabel = (item) => item.design_status || ({ draft: '设计中', experimental: '设计中', active: '已确认', deprecated: '已停用' })[item.status] || '待确认';
   const mappingUpdateLabel = (item) => item.update_method_display || ({ realtime: '实时', event: '事件触发', batch: '批量', manual: '手工触发' })[item.update_method] || item.update_method || '—';
-  const sourceSchemaMappings = useMemo(() => sourceForDetail ? mappings.filter((item) => physicalOrigin(item).sourceCode === sourceForDetail.code) : [], [mappings, sourceForDetail, assets]);
+  const sourceSchemaMappings = useMemo(() => sourceForDetail ? mappings.filter((item) => (!item.ontology_id || item.ontology_id === activeId) && physicalOrigin(item).sourceCode === sourceForDetail.code) : [], [mappings, sourceForDetail, assets, activeId]);
   const schemaFieldCount = detailTables.reduce((total, table) => total + (table.columns || []).length, 0);
   const schemaMappedFieldCount = new Set(sourceSchemaMappings.flatMap((item) => {
     const origin = physicalOrigin(item);

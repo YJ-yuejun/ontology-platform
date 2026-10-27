@@ -3757,3 +3757,9 @@ html, body, #root {
   .schema-view-tabs > span { display:none; }
   .schema-data-table th { min-width:90px; }
 }
+
+/* 数据源表结构：始终左右结构；映射范围限定当前本体 */
+.schema-browser-layout { grid-template-columns:190px minmax(0,1fr); }
+.schema-scope-chip { margin-left:4px; padding:1px 5px; color:#36759a; background:#edf6fb; border:1px solid #d2e6f1; border-radius:7px; font-size:7.5px; font-style:normal; white-space:nowrap; }
+.schema-field-count { flex-wrap:wrap; }
+.schema-data-view > header p { color:#8a9ca9; }
