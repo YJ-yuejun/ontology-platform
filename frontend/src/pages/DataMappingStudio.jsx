@@ -149,8 +149,9 @@ function SchemaDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
           <button type="button" className={mappingFilter === 'mapped' ? 'active' : ''} onClick={() => setMappingFilter('mapped')}>已映射 <b>{mappedFields}</b></button>
           <button type="button" className={mappingFilter === 'unmapped' ? 'active' : ''} onClick={() => setMappingFilter('unmapped')}>未映射 <b>{Math.max(0, totalFields - mappedFields)}</b></button>
         </div>
+        <span className="schema-toolbar-note">字段状态来自数据映射</span>
       </div>
-      <div className="schema-browser-layout">
+      <div className={`schema-browser-layout ${tables.length <= 1 ? 'single-table' : ''}`}>
         <aside className="schema-table-list">
           <header><span>物理表</span><b>{visibleTables.length}</b></header>
           <div className="schema-table-scroll">{visibleTables.map((table) => <button type="button" key={table.name} className={activeTable?.name === table.name ? 'active' : ''} onClick={() => setSelectedTable(table.name)}>
@@ -161,7 +162,7 @@ function SchemaDetailModal({ source, tables, mappings, capturedAt, getOrigin, ta
         </aside>
         <section className="schema-field-panel">
           {!activeTable ? <div className="schema-empty"><TableProperties size={26} /><strong>没有匹配的表结构</strong><p>调整搜索关键词或映射状态筛选。</p></div> : <>
-            <header><div><h3>{activeTable.name}</h3><p>{activeTable.comment || '暂无表注释'} · {activeTable.columns.length} 个字段 · {activeTable.mapped} 个已映射</p></div><button type="button" onClick={() => onCreateMapping(activeTable, null)}><Plus size={14} /> 新建字段映射</button></header>
+            <header><div><h3>{activeTable.name}</h3><p>{activeTable.comment || '暂无表注释'} · {activeTable.columns.length} 个字段 · {activeTable.mapped} 个已映射</p></div><div className="schema-field-head-actions"><span className="schema-field-count"><b>{activeTable.columns.length}</b> 字段 <em>{activeTable.mapped} 已映射</em></span><button type="button" onClick={() => onCreateMapping(activeTable, null)}><Plus size={14} /> 新建字段映射</button></div></header>
             <div className="schema-field-table-wrap"><table className="schema-field-table"><colgroup><col style={{ width: '20%' }} /><col style={{ width: '13%' }} /><col style={{ width: '9%' }} /><col style={{ width: '8%' }} /><col style={{ width: '18%' }} /><col style={{ width: '12%' }} /><col style={{ width: '13%' }} /><col style={{ width: '7%' }} /></colgroup><thead><tr><th>字段</th><th>类型</th><th>键</th><th>可空</th><th>注释</th><th>映射状态</th><th>映射目标</th><th>操作</th></tr></thead><tbody>
               {fields.map((column) => {
                 const entries = fieldEntries(activeTable, column);

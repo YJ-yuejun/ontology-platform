@@ -3616,3 +3616,42 @@ html, body, #root {
 .graph-context-menu button.ai small { margin-left:auto; padding-left:10px; color:#9a8bb8; font-size:9px; font-weight:400; }
 .btn.ai { color:#fff; background:#6a50ad; border-color:#6a50ad; }
 .btn.ai:hover { background:#584196; border-color:#584196; }
+
+/* 表结构浏览器：向知识库数据表靠拢的密度与层级 */
+.schema-browser-layout.single-table { grid-template-columns:minmax(0,1fr); }
+.schema-browser-layout.single-table .schema-table-list { display:none; }
+.schema-toolbar-note { margin-left:auto; color:#96a6b2; font-size:8.5px; white-space:nowrap; }
+.schema-field-head-actions { display:flex; align-items:center; gap:7px; }
+.schema-field-count { display:inline-flex; align-items:center; gap:4px; color:#7e93a2; font-size:8.5px; white-space:nowrap; }
+.schema-field-count b { color:#3d718e; font-size:12px; }
+.schema-field-count em { color:#6f9a82; font-size:8px; font-style:normal; }
+.schema-field-panel > header { min-height:58px; padding:8px 12px; background:#fff; }
+.schema-field-panel h3 { font-size:13px; }
+.schema-field-panel p { font-size:9px; }
+.schema-field-table th { height:36px; padding:6px 9px; color:#5e768a; background:#f5f9fb; font-size:9px; letter-spacing:.02em; }
+.schema-field-table td { height:37px; padding:6px 9px; color:#486579; font-size:10px; }
+.schema-field-table code { color:#254e68; font-size:10px; }
+.schema-field-table tr.mapped td:first-child { box-shadow:inset 3px 0 #74a98c; }
+.schema-field-table tr.mapped td { background:#fcfefd; }
+.schema-field-table tr:hover td { background:#f2f9fd; }
+.schema-field-table tr.mapped:hover td { background:#f5fbf7; }
+.schema-field-table .schema-type { color:#668194; font-size:9px; }
+.schema-field-table .schema-comment { color:#708596; font-size:9px; }
+.schema-field-table .schema-target { color:#3e6077; font-size:9px; }
+.schema-field-table .schema-map-state { font-size:8px; padding:2px 6px; }
+.schema-field-table .schema-view, .schema-field-table .schema-create { min-height:25px; padding:0 7px; font-size:8.5px; }
+.schema-table-list > header { min-height:39px; padding:8px 10px; font-size:9.5px; }
+.schema-table-scroll { padding:6px; }
+.schema-table-scroll button { padding:8px; }
+.schema-table-scroll strong { font-size:10.5px; }
+.schema-table-scroll small { font-size:8.5px; }
+.schema-table-scroll em { font-size:8px; }
+.schema-browser-stats > div { min-height:56px; }
+.schema-browser-stats b { font-size:19px; }
+.schema-field-table-wrap { background:#fff; }
+.schema-browser-modal { gap:10px; }
+@media (max-width:760px) {
+  .schema-toolbar-note { display:none; }
+  .schema-field-head-actions { gap:4px; }
+  .schema-field-count { display:none; }
+}
