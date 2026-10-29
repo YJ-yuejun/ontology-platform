@@ -29,6 +29,7 @@ from models import (
     InterfaceBase,
     LinkTypeBase,
     LinkInstanceBase,
+    MappingTestRequest,
     ObjectInstanceBase,
     ObjectTypeBase,
     OntologyBase,

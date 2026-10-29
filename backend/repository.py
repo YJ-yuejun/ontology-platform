@@ -870,38 +870,128 @@ def get_action(component_id: str) -> Dict[str, Any]:
 
 
 @_no_leak
-def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None) -> Dict[str, Any]:
-    get_ontology(oid); _validate_properties(data.parameters,False); conn=get_conn(); _ensure_object_in_ontology(conn,oid,data.target_object_type_id)
-    conflict=conn.execute("SELECT 1 FROM actions WHERE ontology_id=? AND name=? AND id<>?",(oid,data.name,component_id or "")).fetchone()
-    if conflict: conn.close(); raise ConflictError("Action 标识已存在")
-    timestamp=now(); metadata={key:getattr(data,key) for key in ("external_id","action_category","execution_logic","object_effect","result_schema","side_effects","approval_required","owner","design_status","precondition_mode","target_role","input_parameters_text","precondition_text","result_text","side_effects_text")}
-    before=None
-    if component_id:
-        current=conn.execute("SELECT ontology_id FROM actions WHERE id=?",(component_id,)).fetchone()
-        if not current:
-            conn.close(); raise NotFoundError("Action 不存在")
-        if current["ontology_id"] != oid:
-            conn.close(); raise ValidationError("Action 不属于当前本体")
-        current_full=conn.execute("SELECT * FROM actions WHERE id=?",(component_id,)).fetchone()
-        before=dict(current_full)
-        # 保留导入模板的原始证据和版本；这些字段不属于用户编辑的 13 列。
-        metadata={**json.loads(current_full["metadata"] or "{}"), **metadata}
-        if current_full["status"] == "active" and current_full["name"] != data.name:
-            conn.close(); raise ValidationError("Active Action 不能修改 API 名称")
-        conn.execute("UPDATE actions SET name=?,display_name=?,target_object_type_id=?,action_type=?,description=?,status=?,parameters=?,preconditions=?,metadata=?,updated_at=?,updated_by=? WHERE id=?",(data.name,data.display_name,data.target_object_type_id,data.action_type,data.description,data.status,_json([p.model_dump() for p in data.parameters]),_json(data.preconditions),_json(metadata),timestamp,"manual-admin",component_id)); op="update"
+def _validate_restored_action_mappings(oid):
+    actions = list_actions(oid)
+    conn = get_conn()
+    for item in actions:
+        _validate_action_mapping(conn, oid, ActionBase(**item), item["id"])
+    conn.close()
+
+
+def _validate_action_mapping(conn, oid, data, component_id=None):
+    mapping_code = (data.definition_config or {}).get("action_mapping_code")
+    if mapping_code:
+        if not isinstance(mapping_code, str): raise ValidationError("执行映射编号必须为文本")
+        mapping = conn.execute("SELECT payload FROM enterprise_action_mappings WHERE ontology_id=? AND code=?", (oid, mapping_code)).fetchone()
+        identifiers = {component_id, data.name, data.external_id, data.display_name}
+        binding = json.loads(mapping["payload"] or "{}") if mapping else {}
+        if not mapping or (binding.get("action_code") or binding.get("action_id")) not in identifiers:
+            raise ValidationError("执行映射不存在或不属于当前动作")
+
+
+@_no_leak
+def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None, *, defer_mapping_validation: bool=False) -> Dict[str, Any]:
+    from action_definitions import merge_config, validate_definition
+    get_ontology(oid)
+    conn = get_conn()
+    conn.execute("BEGIN IMMEDIATE")
+    current = conn.execute("SELECT * FROM actions WHERE id=?", (component_id,)).fetchone() if component_id else None
+    if component_id and not current:
+        raise NotFoundError("Action 不存在")
+    previous = _row_action(current) if current else None
+    if previous:
+        if previous["ontology_id"] != oid:
+            raise ValidationError("Action 不属于当前本体")
+        supplied = data.model_dump(exclude_unset=True)
+        if supplied.get("expected_updated_at") and supplied["expected_updated_at"] != previous["updated_at"]:
+            raise ConflictError("动作已被其他操作修改，请刷新后再编辑")
+        if "definition_config" in supplied:
+            if supplied["definition_config"] is None and previous.get("definition_config") is not None:
+                raise ValidationError("不能清除动作配置，请选择文字规则并填写说明")
+            if supplied["definition_config"] is not None:
+                supplied["definition_config"] = merge_config(previous.get("definition_config"), supplied["definition_config"])
+        data = ActionBase(**{**previous, **supplied})
+    # Normalize identity strings without rewriting source evidence or multiline text.
+    for key in ("name", "display_name", "external_id", "action_category", "owner"):
+        value = getattr(data, key)
+        if isinstance(value, str): setattr(data, key, value.strip())
+    if not data.display_name:
+        raise ValidationError("行动名称不能为空")
+    if previous and (previous["name"] != data.name or (previous.get("external_id") and previous["external_id"] != data.external_id)):
+        raise ValidationError("行动编号和 API 名称创建后不可修改")
+    _validate_properties(data.parameters, False)
+    _ensure_object_in_ontology(conn, oid, data.target_object_type_id)
+    # Dictionary names are accepted for legacy imports; new v1 records use codes.
+    if data.action_category:
+        dictionary_exists = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='dic_action_type'").fetchone()
+        matches = conn.execute("SELECT dat_code,dat_status FROM dic_action_type WHERE dat_code=? OR dat_name=?",
+                               (data.action_category, data.action_category)).fetchall() if dictionary_exists else []
+        if len(matches) == 1:
+            if not matches[0]["dat_status"] and data.definition_config is not None and (not previous or previous.get("action_category") != data.action_category):
+                raise ValidationError("不能选择已禁用的行动类型")
+            data.action_category = matches[0]["dat_code"]
+        elif data.definition_config is not None and (not previous or previous.get("action_category") != data.action_category):
+            raise ValidationError("请选择有效的行动类型字典项")
+    if not defer_mapping_validation:
+        _validate_action_mapping(conn, oid, data, component_id)
+    try:
+        validate_definition(data, previous)
+    except ValueError as exc:
+        raise ValidationError(str(exc)) from exc
+    rows = conn.execute("SELECT * FROM actions WHERE ontology_id=? AND id<>?", (oid, component_id or "")).fetchall()
+    for row in rows:
+        other = _row_action(row)
+        for key, title in (("name", "API 名称"), ("display_name", "行动名称"), ("external_id", "行动编号")):
+            value = getattr(data, key)
+            if value and str(other.get(key) or "").strip() == value:
+                raise ConflictError(f"同一本体中{title}已存在")
+    fields = ("external_id", "action_category", "execution_logic", "object_effect", "result_schema", "side_effects",
+              "approval_required", "owner", "design_status", "precondition_mode", "target_role", "input_parameters_text",
+              "precondition_text", "result_text", "side_effects_text", "definition_config", "definition_version")
+    metadata = json.loads(current["metadata"] or "{}") if current else {}
+    metadata.update({key: getattr(data, key) for key in fields if getattr(data, key) is not None or key in data.model_fields_set})
+    timestamp = now()
+    values = (data.name, data.display_name, data.target_object_type_id, data.action_type, data.description, data.status,
+              _json([p.model_dump() for p in data.parameters]), _json(data.preconditions), _json(metadata), timestamp, audit_actor())
+    if current:
+        conn.execute("UPDATE actions SET name=?,display_name=?,target_object_type_id=?,action_type=?,description=?,status=?,parameters=?,preconditions=?,metadata=?,updated_at=?,updated_by=? WHERE id=?", (*values, component_id))
+        op = "update"
     else:
-        component_id=str(uuid.uuid4()); conn.execute("""INSERT INTO actions
-            (id,ontology_id,name,display_name,target_object_type_id,action_type,description,status,parameters,preconditions,created_at,updated_at,metadata,created_by,updated_by)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(component_id,oid,data.name,data.display_name,data.target_object_type_id,data.action_type,data.description,data.status,_json([p.model_dump() for p in data.parameters]),_json(data.preconditions),timestamp,timestamp,_json(metadata),"manual-admin","manual-admin")); op="create"
-    after=dict(conn.execute("SELECT * FROM actions WHERE id=?",(component_id,)).fetchone())
-    conn.execute("UPDATE ontologies SET updated_at=? WHERE id=?",(timestamp,oid)); _log(conn,oid,"action",component_id,op,f"{'更新' if op=='update' else '创建'} Action {data.display_name}",before=before,after=after); conn.commit(); conn.close(); return get_action(component_id)
+        component_id = str(uuid.uuid4())
+        conn.execute("INSERT INTO actions (name,display_name,target_object_type_id,action_type,description,status,parameters,preconditions,metadata,updated_at,updated_by,id,ontology_id,created_at,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                     (*values, component_id, oid, timestamp, audit_actor()))
+        op = "create"
+    after = dict(conn.execute("SELECT * FROM actions WHERE id=?", (component_id,)).fetchone())
+    conn.execute("UPDATE ontologies SET updated_at=? WHERE id=?", (timestamp, oid))
+    _log(conn, oid, "action", component_id, op, f"{'更新' if current else '创建'} Action {data.display_name}", before=dict(current) if current else None, after=after)
+    conn.commit()
+    conn.close()
+    return get_action(component_id)
 
 
 @_no_leak
 def delete_action(component_id: str) -> None:
-    current=get_action(component_id); conn=get_conn()
-    if current["status"] == "active": conn.close(); raise ValidationError("Active Action 不能直接删除，请先标记为 Deprecated")
-    conn.execute("DELETE FROM actions WHERE id=?",(component_id,)); _log(conn,current["ontology_id"],"action",component_id,"delete",f"删除 Action {current['display_name']}",before=current); conn.commit(); conn.close()
+    from action_definitions import references_action
+    conn = get_conn()
+    conn.execute("BEGIN IMMEDIATE")
+    row = conn.execute("SELECT * FROM actions WHERE id=?", (component_id,)).fetchone()
+    if not row: raise NotFoundError("Action 不存在")
+    current = _row_action(row)
+    if current["status"] == "active":
+        raise ValidationError("已启用动作不能直接删除，请通过本体治理标记为已弃用")
+    identifiers = {str(value) for value in (component_id, current["name"], current.get("external_id"), current["display_name"]) if value}
+    references = []
+    for table, label in (("enterprise_business_scenarios", "业务场景"), ("enterprise_action_mappings", "动作执行映射"), ("enterprise_permission_policies", "权限策略")):
+        if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone(): continue
+        for resource in conn.execute(f"SELECT name,payload FROM {table} WHERE ontology_id=?", (current["ontology_id"],)).fetchall():
+            if references_action(json.loads(resource["payload"] or "{}"), identifiers):
+                references.append(f"{label}「{resource['name']}」")
+    if references:
+        raise ConflictError("动作仍被引用，不能删除：" + "、".join(references))
+    conn.execute("DELETE FROM actions WHERE id=?", (component_id,))
+    _log(conn, current["ontology_id"], "action", component_id, "delete", f"删除 Action {current['display_name']}", before=current)
+    conn.commit()
+    conn.close()
 
 
 def list_shared_properties(oid: str) -> list[Dict[str, Any]]:
@@ -2110,7 +2200,7 @@ def catalog(oid: str) -> list[Dict[str, Any]]:
 
 
 def import_ontology(payload: Dict[str, Any]) -> Dict[str, Any]:
-    source=payload.get("ontology") or {}; base=OntologyBase(name=f"{source.get('name','导入本体')}（导入）",namespace=f"{source.get('namespace','imported.ontology')}.{uuid.uuid4().hex[:6]}",description=source.get("description")); created=create_ontology(base); oid=created["id"]; id_map={}; interface_map={}; instance_map={}; link_map={}; domain_map={}; subject_map={}
+    source=payload.get("ontology") or {}; base=OntologyBase(name=f"{source.get('name','导入本体')}（导入）",namespace=f"{source.get('namespace','imported.ontology')}.{uuid.uuid4().hex[:6]}",description=source.get("description")); created=create_ontology(base); oid=created["id"]; id_map={}; interface_map={}; instance_map={}; link_map={}; domain_map={}; subject_map={}; action_map={}
     for item in payload.get("business_domains",[]):
         data=BusinessDomainBase(**{k:v for k,v in item.items() if k in BusinessDomainBase.model_fields}); saved=save_business_domain(oid,data); domain_map[item.get("id")]=saved["id"]
     if not domain_map:
@@ -2139,7 +2229,7 @@ def import_ontology(payload: Dict[str, Any]) -> Dict[str, Any]:
     for item in payload.get("link_types",[]):
         data={k:v for k,v in item.items() if k in LinkTypeBase.model_fields}; data["source_object_type_id"]=id_map.get(item.get("source_object_type_id"),item.get("source_object_type_id")); data["target_object_type_id"]=id_map.get(item.get("target_object_type_id"),item.get("target_object_type_id")); saved=save_link_type(oid,LinkTypeBase(**data)); link_map[item.get("id")]=saved["id"]
     for item in payload.get("actions",[]):
-        data={k:v for k,v in item.items() if k in ActionBase.model_fields}; data["target_object_type_id"]=id_map.get(item.get("target_object_type_id"),item.get("target_object_type_id")); save_action(oid,ActionBase(**data))
+        data={k:v for k,v in item.items() if k in ActionBase.model_fields}; data["target_object_type_id"]=id_map.get(item.get("target_object_type_id"),item.get("target_object_type_id")); saved=save_action(oid,ActionBase(**data),defer_mapping_validation=True); action_map[item.get("id")]=saved["id"]
     for item in payload.get("business_rules",[]):
         data={k:v for k,v in item.items() if k in BusinessRuleBase.model_fields}; data["target_object_type_id"]=id_map.get(item.get("target_object_type_id"),item.get("target_object_type_id")); save_business_rule(oid,BusinessRuleBase(**data))
     for item in payload.get("object_instances",[]):
@@ -2155,7 +2245,11 @@ def import_ontology(payload: Dict[str, Any]) -> Dict[str, Any]:
             core={key:item.get(key) for key in ("code","name","category","status","description")}
             excluded={"id","ontology_id","code","name","category","status","description","created_at","updated_at"}
             core["payload"]={key:value for key,value in item.items() if key not in excluded}
+            if kind == "action-mappings":
+                for key in ("action_code", "action_id"):
+                    if core["payload"].get(key) in action_map: core["payload"][key] = action_map[core["payload"][key]]
             save_resource(oid,kind,EnterpriseResourceBase(**core))
+    _validate_restored_action_mappings(oid)
     return get_ontology(oid)
 
 
@@ -2332,10 +2426,12 @@ def copy_ontology(oid: str, name: Optional[str] = None, namespace: Optional[str]
         _carry_over_metadata("link_types", saved["id"], metadata_maps["link_types"].get(item["id"]), drop_synthesized=True)
         link_map[item["id"]] = saved["id"]
 
+    action_map = {}
     for item in list_actions(oid):
         data = {k: v for k, v in item.items() if k in ActionBase.model_fields}
         data["target_object_type_id"] = _remap_reference(item["target_object_type_id"], object_map)
-        saved = save_action(new_id, ActionBase(**data))
+        saved = save_action(new_id, ActionBase(**data), defer_mapping_validation=True)
+        action_map[item["id"]] = saved["id"]
         _carry_over_metadata("actions", saved["id"], metadata_maps["actions"].get(item["id"]), drop_synthesized=True)
 
     for item in list_business_rules(oid):
@@ -2346,7 +2442,11 @@ def copy_ontology(oid: str, name: Optional[str] = None, namespace: Optional[str]
 
     for kind in COPY_ONTOLOGY_ENTERPRISE_REST:
         for item in list_resources(oid, kind):
-            save_resource(new_id, kind, _enterprise_resource_base(item))
+            resource = _enterprise_resource_base(item)
+            if kind == "action-mappings":
+                for key in ("action_code", "action_id"):
+                    if resource.payload.get(key) in action_map: resource.payload[key] = action_map[resource.payload[key]]
+            save_resource(new_id, kind, resource)
 
     for item in list_object_instances(oid):
         data = {k: v for k, v in item.items() if k in ObjectInstanceBase.model_fields}
@@ -2361,6 +2461,7 @@ def copy_ontology(oid: str, name: Optional[str] = None, namespace: Optional[str]
         data["target_instance_id"] = _remap_reference(item["target_instance_id"], instance_map)
         save_link_instance(new_id, LinkInstanceBase(**data))
 
+    _validate_restored_action_mappings(new_id)
     result = get_ontology(new_id)
     result["origin_ontology_id"] = oid
     result["copied"] = {

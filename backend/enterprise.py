@@ -738,6 +738,12 @@ def save_resource(ontology_id: str, kind: str, data: EnterpriseResourceBase, res
                     raise repo.ValidationError("治理资产字段仍被语义映射引用，不能直接删除或改名")
             if referenced and data.payload.get("verification_status") != "confirmed":
                 raise repo.ValidationError("已被映射引用的治理资产不能退回待确认")
+    if kind == "action-mappings" and resource_id:
+        for action in repo.list_actions(ontology_id):
+            if (action.get("definition_config") or {}).get("action_mapping_code") != data.code: continue
+            identifiers = {action["id"], action["name"], action.get("external_id"), action["display_name"]}
+            if (data.payload.get("action_code") or data.payload.get("action_id")) not in identifiers:
+                raise repo.ValidationError("该执行映射已被动作定义引用，不能改绑到其他动作")
     if kind == "business-scenarios": _validate_business_scenario(ontology_id,data.payload, allow_legacy_steps=allow_legacy_steps)
     if kind == "logic-definitions": _validate_authored_logic(ontology_id, data)
     table, label = RESOURCE_TABLES[kind]
@@ -790,6 +796,12 @@ def delete_resource(kind: str, resource_id: str) -> None:
     if not row:
         conn.close()
         raise repo.NotFoundError(f"{label}不存在")
+    if kind == "action-mappings":
+        referenced = [item["display_name"] for item in repo.list_actions(row["ontology_id"])
+                      if (item.get("definition_config") or {}).get("action_mapping_code") == row["code"]]
+        if referenced:
+            conn.close()
+            raise repo.ConflictError("执行映射仍被动作定义引用：" + "、".join(referenced))
     if kind == "data-sources":
         object_count = conn.execute("SELECT COUNT(*) c FROM object_types WHERE ontology_id=? AND backing_source=?", (row["ontology_id"], row["code"])).fetchone()["c"]
         mapping_count = sum(row["code"] == item.get("source_code") for item in list_resources(row["ontology_id"], "data-mappings"))

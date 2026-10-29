@@ -39,7 +39,7 @@ SEMANTIC_FIELDS = {
     "interfaces": ("name", "display_name", "description", "properties"),
     "link_types": ("name", "display_name", "description", "source_object_type_id", "target_object_type_id", "cardinality", "properties", "source_key", "target_key"),
     "business_rules": ("name", "display_name", "description", "target_object_type_id", "expression", "severity", "trigger_mode"),
-    "actions": ("name", "display_name", "description", "target_object_type_id", "parameters", "preconditions", "precondition_mode", "execution_logic", "action_category"),
+    "actions": ("name", "display_name", "description", "external_id", "target_object_type_id", "action_type", "parameters", "preconditions", "precondition_mode", "precondition_text", "execution_logic", "action_category", "object_effect", "result_text", "result_schema", "side_effects", "side_effects_text", "approval_required", "owner", "definition_config", "definition_version"),
     # Compare source metadata without exposing host, username or credentials.
     "data-sources": ("code", "name", "category", "description", "system_type", "database_type",
                      "data_topic", "data_scope", "data_category", "interface_type", "update_frequency", "physical_object"),

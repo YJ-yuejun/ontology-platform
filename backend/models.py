@@ -132,6 +132,10 @@ class ActionBase(BaseModel):
     precondition_text: Optional[str] = None
     result_text: Optional[str] = None
     side_effects_text: Optional[str] = None
+    # v1 definition management; configuration is descriptive and never executed.
+    definition_config: Optional[Dict[str, Any]] = None
+    definition_version: Optional[str] = None
+    expected_updated_at: Optional[str] = None
 
 
 class ImportRequest(BaseModel):
