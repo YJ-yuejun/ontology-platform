@@ -29,3 +29,13 @@ export const formatTime = (value) => {
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   }).format(new Date(value));
 };
+
+export const ontologyExportFilename = (ontologyName) => {
+  const baseName = String(ontologyName || '本体')
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_') || '本体';
+  const iso = new Date().toISOString();
+  const stamp = `${iso.slice(0, 10).replace(/-/g, '')}_${iso.slice(11, 19).replace(/:/g, '')}`;
+  return `${baseName}_本体全量导出_${stamp}.xlsx`;
+};

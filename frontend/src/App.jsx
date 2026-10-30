@@ -6,7 +6,7 @@ import {
   Library, MessageSquareText, Network, Plus, Search, Settings, ShieldCheck, Sparkles, Layers3, TableProperties,
   Waypoints, Workflow, LogOut, MoreHorizontal, UserRound, Download,
 } from 'lucide-react';
-import { api } from './api';
+import { api, ontologyExportFilename } from './api';
 import Modal from './components/Modal';
 import ObjectTypes from './pages/ObjectTypes';
 import ObjectProperties from './pages/ObjectProperties';
@@ -197,8 +197,7 @@ function OntologySwitchDialog({ ontologies, activeId, onChoose, onClose, onCreat
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = href;
-      const stamp = `${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}Z`;
-      anchor.download = `${active.namespace || active.name}-ONTOLOGY-FULL-${stamp}.xlsx`;
+      anchor.download = ontologyExportFilename(active.name);
       anchor.click();
       URL.revokeObjectURL(href);
     } catch (error) {

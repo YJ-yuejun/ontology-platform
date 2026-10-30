@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import re
 from typing import Any, Optional
 from pydantic import BaseModel, Field
 
@@ -565,11 +566,9 @@ def export_ontology_xlsx(ontology_id: str, resource_type: Optional[str] = None, 
     except repo.ValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     ontology = repo.get_ontology(ontology_id)
-    export_stamp = repo.now()[:19].replace("-", "").replace(":", "") + "Z"
-    scope = "FULL" if not resource_type else f"RESOURCE-{resource_type.upper()}"
-    resource_token = f"-{resource_id}" if resource_id else ""
-    base_name = ontology.get("namespace") or ontology.get("name") or "ontology"
-    filename = f"{base_name}-ONTOLOGY-{scope}{resource_token}-{export_stamp}.xlsx"
+    export_stamp = repo.now()[:19].replace("-", "").replace(":", "").replace("T", "_")
+    base_name = re.sub(r"\s+", "_", re.sub(r'[\\/:*?"<>|]+', "_", (ontology.get("name") or "本体").strip())).strip(" _") or "本体"
+    filename = f"{base_name}_本体全量导出_{export_stamp}.xlsx"
     from urllib.parse import quote
     safe_filename = "ontology-export.xlsx"
     encoded_filename = quote(filename)

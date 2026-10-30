@@ -4,7 +4,7 @@ import {
   Boxes, Building2, CheckCircle2, ChevronRight, CircleAlert, Clock3, Copy, Download, GitBranch, Hammer,
   Layers3, ListChecks, Pencil, Plus, Search, Trash2, X,
 } from 'lucide-react';
-import { api, formatTime } from '../api';
+import { api, formatTime, ontologyExportFilename } from '../api';
 import { actorLabel, localizeModelText, statusLabel } from '../labels';
 import Modal from '../components/Modal';
 import { ErrorState, Loading } from '../components/StateViews';
@@ -115,21 +115,15 @@ export default function Overview({ activeId, active, refreshOntologies, notify }
     dismissResourceGuide();
     requestResource({ ontology: active, objectCount: data?.stats.object_types || 0 });
   };
-  const downloadExport = async (resourceType = '', resourceId = '') => {
+  const downloadExport = async () => {
     setExportBusy(true);
     try {
-      const params = new URLSearchParams();
-      if (resourceType) params.set('resource_type', resourceType);
-      if (resourceId) params.set('resource_id', resourceId);
-      const response = await fetch(`/api/ontologies/${activeId}/export.xlsx${params.toString() ? `?${params}` : ''}`);
+      const response = await fetch(`/api/ontologies/${activeId}/export.xlsx`);
       if (!response.ok) throw new Error(await response.text());
       const blob = await response.blob();
       const href = URL.createObjectURL(blob);
-      const stamp = `${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}Z`;
-      const scope = resourceType ? `RESOURCE-${resourceType.toUpperCase()}` : 'FULL';
-      const resourceToken = resourceId ? `-${resourceId}` : '';
-      const anchor = document.createElement('a'); anchor.href = href; anchor.download = `${active.namespace || active.name}-ONTOLOGY-${scope}${resourceToken}-${stamp}.xlsx`; anchor.click(); URL.revokeObjectURL(href);
-      setExportOpen(false); notify(resourceType ? '资源 Excel 已导出' : '完整本体 Excel 已导出');
+      const anchor = document.createElement('a'); anchor.href = href; anchor.download = ontologyExportFilename(active.name); anchor.click(); URL.revokeObjectURL(href);
+      setExportOpen(false); notify('本体 Excel 已导出');
     } catch (e) { notify(e.message || '导出失败'); } finally { setExportBusy(false); }
   };
 
@@ -163,7 +157,7 @@ export default function Overview({ activeId, active, refreshOntologies, notify }
       </section>
 
       <aside className="oma-inspector">
-        {selected ? <><header><span>资源详情</span><div className="oma-inspector-actions"><button type="button" onClick={() => downloadExport(selected.resource_type, selected.id)} disabled={exportBusy}><Download size={14} /> 导出</button><button onClick={() => navigate(typeMeta[selected.resource_type]?.route || '/ontology/overview')}>打开 <ChevronRight size={14} /></button></div></header><div className="oma-inspector-title">{(() => { const Icon=typeMeta[selected.resource_type]?.icon || Boxes; return <i><Icon size={20} /></i>; })()}<div><h3>{selected.display_name}</h3><code>{selected.name}</code></div></div><p>{selected.description || '尚未填写该资源的说明。'}</p><dl><div><dt>资源类型</dt><dd>{typeMeta[selected.resource_type]?.label}</dd></div><div><dt>状态</dt><dd><em className={`oma-status ${selected.status}`}>{statusLabel(selected.status)}</em></dd></div><div><dt>详情</dt><dd>{detailLabel(selected)}</dd></div><div><dt>最后编辑</dt><dd>{formatTime(selected.updated_at)}</dd></div></dl></> : <div />}
+        {selected ? <><header><span>资源详情</span><div className="oma-inspector-actions"><button onClick={() => navigate(typeMeta[selected.resource_type]?.route || '/ontology/overview')}>打开 <ChevronRight size={14} /></button></div></header><div className="oma-inspector-title">{(() => { const Icon=typeMeta[selected.resource_type]?.icon || Boxes; return <i><Icon size={20} /></i>; })()}<div><h3>{selected.display_name}</h3><code>{selected.name}</code></div></div><p>{selected.description || '尚未填写该资源的说明。'}</p><dl><div><dt>资源类型</dt><dd>{typeMeta[selected.resource_type]?.label}</dd></div><div><dt>状态</dt><dd><em className={`oma-status ${selected.status}`}>{statusLabel(selected.status)}</em></dd></div><div><dt>详情</dt><dd>{detailLabel(selected)}</dd></div><div><dt>最后编辑</dt><dd>{formatTime(selected.updated_at)}</dd></div></dl></> : <div />}
         <section className="oma-quality"><header><strong>本体校验</strong><button onClick={() => navigate('/ontology/governance')}>查看全部</button></header><div className={data.quality.valid ? 'pass' : 'fail'}>{data.quality.valid ? <CheckCircle2 size={18} /> : <CircleAlert size={18} />}<span><b>{data.quality.valid ? '没有阻断错误' : `${data.quality.errors} 项阻断错误`}</b><small>{data.quality.warnings} 项警告 · 已通过 {data.quality.checks_passed}/{data.quality.checks_total} 项检查</small></span></div></section>
         <section className="oma-changes"><header><strong>最近活动</strong><button type="button" onClick={() => setSearchParams({ tab: 'changes' })}>查看全部 <ChevronRight size={13} /></button></header>{data.recent_changes.map((item) => <div key={item.id}><i className={item.pending ? 'pending' : ''} /><span><b>{localizeModelText(item.summary)}</b><small>{formatTime(item.created_at)} · {actorLabel(item.actor)}</small></span></div>)}{!data.recent_changes.length && <p className="oma-changes-empty"><Clock3 size={15} /> 暂无建模操作</p>}</section>
         <button className="oma-delete" onClick={remove}><Trash2 size={14} /> 删除本体</button>
@@ -171,7 +165,7 @@ export default function Overview({ activeId, active, refreshOntologies, notify }
     </div>}
 
     {exportOpen && <Modal title="导出本体 Excel" subtitle="选择导出范围；完整导出会按资源类型生成多个 Sheet，并保留模板来源字段。" onClose={() => !exportBusy && setExportOpen(false)} footer={<><button className="btn secondary" disabled={exportBusy} onClick={() => setExportOpen(false)}>取消</button><button className="btn primary" disabled={exportBusy} onClick={() => downloadExport()}>{exportBusy ? '导出中…' : '导出完整本体'}</button></>}>
-      <div className="form-sections ontology-export-dialog"><section className="form-section"><h3>完整本体导出</h3><p className="form-hint">包含当前本体信息、业务域、场景、对象类型、属性、关系、实例、数据映射、规则、动作、系统能力、动作映射、权限策略和证据来源等资源。每类资源单独一个 Sheet。</p></section><section className="form-section"><h3>按资源导出</h3><p className="form-hint">在资源目录选中资源后，可以在右侧详情点击“导出”；这里提供当前已选资源的快捷导出。</p>{selected ? <button className="oma-export-resource" disabled={exportBusy} onClick={() => downloadExport(selected.resource_type, selected.id)}><Download size={15} /><span><b>{selected.display_name}</b><small>{typeMeta[selected.resource_type]?.label || selected.resource_type} · 导出当前资源一行</small></span></button> : <p className="form-hint">当前未选中资源，请先关闭弹窗并在目录中选择一项。</p>}</section></div>
+      <div className="form-sections ontology-export-dialog"><section className="form-section"><h3>完整本体导出</h3><p className="form-hint">导出当前本体的全部资源，每类资源单独一个 Sheet。文件名使用本体名称和导出时间，便于业务人员识别和归档。</p></section></div>
     </Modal>}
     {copyOpen && <Modal title="复制为分支" subtitle={`以「${active.name}」为模板创建一份完整副本`} onClose={() => !copyBusy && setCopyOpen(false)} footer={<><button className="btn secondary" disabled={copyBusy} onClick={() => setCopyOpen(false)}>取消</button><button form="copy-ontology" disabled={copyBusy} className="btn primary">{copyBusy ? '复制中…' : '开始复制'}</button></>}><form id="copy-ontology" className="form-sections" onSubmit={submitCopy}><section className="form-section"><h3>新本体标识</h3><p className="form-hint">复制出来的分支直接用本体名称区分，例如“资产本体_copy”“资产本体v2”；不再使用版本号。</p><label><span>本体名称</span><input required value={copyForm.name} onChange={(e) => setCopyForm({ ...copyForm, name: e.target.value })} /></label><label><span>命名空间</span><input required className="mono" value={copyForm.namespace} onChange={(e) => setCopyForm({ ...copyForm, namespace: e.target.value })} /><small>与已有本体重复时会自动补随机后缀。</small></label></section><section className="form-section"><h3>复制范围</h3><p className="form-hint">会复制：业务域与主题域、接口、对象类型与属性、关系类型、动作类型、规则、数据源与治理资产、语义映射、系统能力与执行映射、权限策略、业务场景、实例数据，以及每个资源上的模板证据。</p><p className="form-hint">不会复制：发布版本、变更记录、质检报告、智能构建提案与会话、场景运行记录、智能体交互，以及数据源连接密码（需在分支里重新配置）。</p></section></form></Modal>}
     {editOpen && <Modal title="编辑本体信息" subtitle="更新本体标识、命名空间与业务边界" onClose={() => setEditOpen(false)} footer={<><button className="btn secondary" onClick={() => setEditOpen(false)}>取消</button><button form="edit-ontology" disabled={busy} className="btn primary">保存信息</button></>}><form id="edit-ontology" className="form-sections" onSubmit={save}><section className="form-section"><h3>基础标识</h3><label><span>本体名称</span><input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label><label><span>命名空间</span><input required className="mono" value={form.namespace} onChange={(e) => setForm({ ...form, namespace: e.target.value })} /><small>修改命名空间前请确认外部引用是否依赖当前标识。</small></label></section><section className="form-section"><h3>业务范围</h3><label><span>业务说明</span><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label></section></form></Modal>}
