@@ -555,6 +555,25 @@ def export_ontology(ontology_id: str):
     return repo.export_ontology(ontology_id)
 
 
+@app.get("/api/ontologies/{ontology_id}/export.xlsx")
+def export_ontology_xlsx(ontology_id: str, resource_type: Optional[str] = None, resource_id: Optional[str] = None):
+    from fastapi.responses import Response
+    try:
+        content = repo.export_ontology_xlsx(ontology_id, resource_type, resource_id)
+    except repo.NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except repo.ValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    ontology = repo.get_ontology(ontology_id)
+    suffix = f"-{resource_type}" if resource_type else "-完整本体"
+    filename = f"{ontology.get('namespace') or ontology.get('name')}{suffix}.xlsx"
+    from urllib.parse import quote
+    safe_filename = "ontology-export.xlsx"
+    encoded_filename = quote(filename)
+    disposition = f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{encoded_filename}"
+    return Response(content=content, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": disposition})
+
+
 def _enterprise_kind(kind: str) -> str:
     if kind not in enterprise.RESOURCE_TABLES and kind != "versions":
         raise HTTPException(status_code=404, detail="企业本体资源类型不存在")

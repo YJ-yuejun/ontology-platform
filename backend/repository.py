@@ -2179,6 +2179,157 @@ def export_ontology(oid: str) -> Dict[str, Any]:
     return payload
 
 
+XLSX_RESOURCE_SHEETS = {
+    "business_domains": "00_前置",
+    "business-scenarios": "01_业务场景",
+    "object_types": "02_对象类型",
+    "object_properties": "03_对象属性",
+    "link_types": "04_关系",
+    "object_instances": "05_对象实例",
+    "data-mappings": "06_数据源映射",
+    "logic-definitions": "07_规则",
+    "actions": "08_动作",
+    "action-mappings": "09_动作映射",
+    "data-sources": "11_系统",
+    "capabilities": "13_接口能力",
+    "permission-policies": "14_权限安全",
+    "evidence_manifest": "17_证据来源",
+}
+
+XLSX_HEADERS = {
+    "00_本体信息": ["字段", "值"],
+    "00_前置": ["业务域ID", "业务域名称", "所属空间", "业务定义", "责任组织", "业务目标"],
+    "01_业务场景": ["场景ID", "业务场景", "业务目标", "触发条件", "主要对象ID", "关键关系ID", "规则ID", "动作ID", "关联的公司系统"],
+    "02_对象类型": ["对象类型ID", "对象类型名称", "对象分类", "业务定义", "生命周期", "业务域", "状态", "版本"],
+    "03_对象属性": ["属性编码", "属性名称", "属性说明", "所属对象ID", "对象名称", "数据来源", "数据类型", "长度", "必填", "值域/约束", "属性ID"],
+    "04_关系": ["关系ID", "源对象ID", "源对象名称", "关系名称", "目标对象ID", "目标对象名称", "关系说明", "方向", "基数", "来源"],
+    "05_对象实例": ["实例ID", "所属对象类型ID", "所属对象类型名称", "实例名称", "业务唯一标识", "状态", "来源系统"],
+    "06_数据源映射": ["映射ID", "属性ID", "属性名称", "数据源系统", "数据表/主题", "字段名", "数据库/接口/文件", "更新频率", "数据类别", "所属组织ID"],
+    "07_规则": ["规则ID", "规则名称", "规则类型", "适用对象ID", "适用对象名称", "输入对象/数据", "输入的属性", "判断/计算逻辑", "输出", "触发动作ID", "触发动作名称"],
+    "08_动作": ["动作ID", "动作名称", "作用对象ID", "作用对象名称", "触发规则ID", "触发规则名称", "触发条件", "执行结果/输出"],
+    "09_动作映射": ["映射ID", "动作ID", "动作名称", "执行动作的公司系统", "接口能力ID", "说明", "执行方式"],
+    "11_系统": ["系统ID", "系统名称", "系统类型", "所属组织ID", "主要业务职责", "系统状态"],
+    "13_接口能力": ["接口能力ID", "公司系统", "接口能力名称", "输入", "输出"],
+    "14_权限安全": ["权限ID", "主体类型", "主体名称", "资源类型", "对象ID", "对象名称", "权限", "数据范围", "组织范围", "审批要求", "有效期", "状态"],
+    "17_证据来源": ["证据ID", "模型元素类型", "模型元素ID", "来源类型", "来源名称", "来源位置", "原始证据", "识别结论", "置信度", "审核状态"],
+}
+
+
+def _xlsx_cell(value: Any) -> Any:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "是" if value else "否"
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _xlsx_row(headers, mapping):
+    return [_xlsx_cell(mapping.get(header, "")) for header in headers]
+
+
+def _resource_sheet_data(oid: str):
+    from enterprise import RESOURCE_TABLES, list_evidence, list_resources
+    objects = list_object_types(oid)
+    object_by_id = {item["id"]: item for item in objects}
+    object_by_external = {item.get("external_id"): item for item in objects if item.get("external_id")}
+    domains = list_business_domains(oid)
+    actions = list_actions(oid)
+    rules = list_business_rules(oid)
+    logic = list_resources(oid, "logic-definitions")
+    scenarios = list_resources(oid, "business-scenarios")
+    mappings = list_resources(oid, "data-mappings")
+    action_mappings = list_resources(oid, "action-mappings")
+    sources = list_resources(oid, "data-sources")
+    capabilities = list_resources(oid, "capabilities")
+    policies = list_resources(oid, "permission-policies")
+    links = list_link_types(oid)
+    instances = list_object_instances(oid)
+    props = []
+    for obj in objects:
+        for prop in obj.get("effective_properties", obj.get("properties", [])):
+            props.append({**prop, "object_type_id": obj.get("external_id") or obj.get("id"), "object_display_name": obj.get("display_name")})
+    action_by_id = {item["id"]: item for item in actions}
+    action_by_external = {item.get("external_id"): item for item in actions if item.get("external_id")}
+    rule_by_code = {item.get("code"): item for item in logic if item.get("code")}
+    rows = {}
+    rows["00_本体信息"] = [["本体名称", get_ontology(oid).get("name")], ["命名空间", get_ontology(oid).get("namespace")], ["本体ID", oid], ["导出时间", now()], ["说明", get_ontology(oid).get("description") or ""]]
+    rows["00_前置"] = [_xlsx_row(XLSX_HEADERS["00_前置"], {"业务域ID": x.get("code"), "业务域名称": x.get("name"), "业务定义": x.get("description"), "责任组织": x.get("owner"), "业务目标": x.get("goal") or x.get("business_goal")}) for x in domains]
+    rows["01_业务场景"] = [_xlsx_row(XLSX_HEADERS["01_业务场景"], {"场景ID": x.get("code"), "业务场景": x.get("name"), "业务目标": x.get("business_goal"), "触发条件": x.get("trigger_condition"), "主要对象ID": x.get("related_objects"), "关键关系ID": x.get("related_links"), "规则ID": x.get("related_rules"), "动作ID": x.get("related_actions"), "关联的公司系统": x.get("connected_systems")}) for x in scenarios]
+    rows["02_对象类型"] = [_xlsx_row(XLSX_HEADERS["02_对象类型"], {"对象类型ID": x.get("external_id") or x.get("id"), "对象类型名称": x.get("display_name"), "对象分类": x.get("object_kind"), "业务定义": x.get("description"), "生命周期": x.get("lifecycle"), "业务域": x.get("business_domain_name") or x.get("business_domain_code"), "状态": x.get("status"), "版本": x.get("definition_version")}) for x in objects]
+    rows["03_对象属性"] = [_xlsx_row(XLSX_HEADERS["03_对象属性"], {"属性编码": x.get("key"), "属性名称": x.get("name"), "属性说明": x.get("description"), "所属对象ID": x.get("object_type_id"), "对象名称": x.get("object_display_name"), "数据来源": x.get("source_system"), "数据类型": x.get("type"), "长度": x.get("length"), "必填": x.get("is_required"), "值域/约束": x.get("constraints") or x.get("enum_values"), "属性ID": x.get("external_id") or x.get("id")}) for x in props]
+    rows["04_关系"] = [_xlsx_row(XLSX_HEADERS["04_关系"], {"关系ID": x.get("external_id") or x.get("id"), "源对象ID": x.get("source_object_type_id"), "源对象名称": x.get("source_display_name"), "关系名称": x.get("display_name"), "目标对象ID": x.get("target_object_type_id"), "目标对象名称": x.get("target_display_name"), "关系说明": x.get("description"), "方向": x.get("reverse_display_name") or "正向", "基数": x.get("cardinality"), "来源": x.get("source_system")}) for x in links]
+    rows["05_对象实例"] = [_xlsx_row(XLSX_HEADERS["05_对象实例"], {"实例ID": x.get("external_id") or x.get("id"), "所属对象类型ID": x.get("object_type_id"), "所属对象类型名称": object_by_id.get(x.get("object_type_id"), {}).get("display_name"), "实例名称": x.get("title"), "业务唯一标识": x.get("business_key"), "状态": x.get("record_status"), "来源系统": x.get("source_system")}) for x in instances]
+    rows["06_数据源映射"] = [_xlsx_row(XLSX_HEADERS["06_数据源映射"], {"映射ID": x.get("code"), "属性ID": x.get("target_property"), "属性名称": x.get("target_property"), "数据源系统": x.get("source_code"), "数据表/主题": x.get("source_table"), "字段名": x.get("source_field"), "数据库/接口/文件": x.get("source_kind"), "更新频率": x.get("update_frequency"), "数据类别": x.get("data_category"), "所属组织ID": x.get("organization_id")}) for x in mappings]
+    rule_rows = logic or [{**x, "code": x.get("external_id")} for x in rules]
+    rows["07_规则"] = [_xlsx_row(XLSX_HEADERS["07_规则"], {"规则ID": x.get("code") or x.get("external_id"), "规则名称": x.get("name") or x.get("display_name"), "规则类型": x.get("category"), "适用对象ID": x.get("target_object_type"), "适用对象名称": x.get("target_display_name"), "输入对象/数据": x.get("input_object_data"), "输入的属性": x.get("input_fields_display"), "判断/计算逻辑": x.get("logic") or x.get("expression"), "输出": x.get("output") or x.get("output_description"), "触发动作ID": x.get("trigger_action_id"), "触发动作名称": x.get("trigger_action_name")}) for x in rule_rows]
+    rows["08_动作"] = [_xlsx_row(XLSX_HEADERS["08_动作"], {"动作ID": x.get("external_id") or x.get("id"), "动作名称": x.get("display_name"), "作用对象ID": object_by_id.get(x.get("target_object_type_id"), {}).get("external_id") or x.get("target_object_type_id"), "作用对象名称": x.get("target_display_name"), "触发规则ID": x.get("trigger_rule_codes"), "触发规则名称": x.get("trigger_rules"), "触发条件": x.get("precondition_text"), "执行结果/输出": x.get("result_text")}) for x in actions]
+    rows["09_动作映射"] = [_xlsx_row(XLSX_HEADERS["09_动作映射"], {"映射ID": x.get("code"), "动作ID": x.get("action_code"), "动作名称": action_by_external.get(x.get("action_code"), {}).get("display_name"), "执行动作的公司系统": x.get("target_system"), "接口能力ID": x.get("capability_code"), "说明": x.get("description"), "执行方式": x.get("invoke_mode")}) for x in action_mappings]
+    rows["11_系统"] = [_xlsx_row(XLSX_HEADERS["11_系统"], {"系统ID": x.get("code"), "系统名称": x.get("name"), "系统类型": x.get("system_type"), "所属组织ID": x.get("organization_id"), "主要业务职责": x.get("description"), "系统状态": x.get("status")}) for x in sources]
+    rows["13_接口能力"] = [_xlsx_row(XLSX_HEADERS["13_接口能力"], {"接口能力ID": x.get("code"), "公司系统": x.get("target_system"), "接口能力名称": x.get("name"), "输入": x.get("input"), "输出": x.get("output")}) for x in capabilities]
+    rows["14_权限安全"] = [_xlsx_row(XLSX_HEADERS["14_权限安全"], {"权限ID": x.get("code"), "主体类型": x.get("subject_type"), "主体名称": x.get("subject_name"), "资源类型": x.get("resource_type"), "对象ID": x.get("resource_ref"), "对象名称": x.get("resource_ref"), "权限": x.get("permission"), "数据范围": x.get("data_scope"), "组织范围": x.get("organization_scope"), "审批要求": x.get("approval_requirement"), "有效期": x.get("validity"), "状态": x.get("status")}) for x in policies]
+    rows["17_证据来源"] = [_xlsx_row(XLSX_HEADERS["17_证据来源"], {"证据ID": x.get("code") or x.get("id"), "模型元素类型": x.get("resource_type") or x.get("source_kind"), "模型元素ID": x.get("resource_id") or x.get("component_id"), "来源类型": x.get("source_type"), "来源名称": x.get("source_name"), "来源位置": x.get("source_location"), "原始证据": x.get("evidence"), "识别结论": x.get("conclusion"), "置信度": x.get("confidence"), "审核状态": x.get("review_status")}) for x in list_evidence(oid)]
+    # 未能规范化到当前资源表的企业资源仍提供一份完整的 JSON 资源表，避免导出丢失。
+    for kind in RESOURCE_TABLES:
+        if kind not in XLSX_RESOURCE_SHEETS:
+            items = list_resources(oid, kind)
+            if items:
+                sheet = f"资源_{kind[:20]}"
+                keys = list(dict.fromkeys(key for item in items for key in item.keys()))
+                rows[sheet] = [[_xlsx_cell(item.get(key)) for key in keys] for item in items]
+                XLSX_HEADERS[sheet] = keys
+    return rows
+
+
+def export_ontology_xlsx(oid: str, resource_type: Optional[str] = None, resource_id: Optional[str] = None) -> bytes:
+    import io
+    import zipfile
+    from xml.sax.saxutils import escape, quoteattr
+    from enterprise import list_resources
+    get_ontology(oid)
+    data = _resource_sheet_data(oid)
+    if resource_type:
+        aliases = {"object_type": "02_对象类型", "link_type": "04_关系", "action": "08_动作", "business_rule": "07_规则", "interface": "13_接口能力", "business_domain": "00_前置", "object_instance": "05_对象实例", "data_source": "11_系统", "data_mapping": "06_数据源映射", "action_mapping": "09_动作映射", "capability": "13_接口能力", "permission_policy": "14_权限安全"}
+        sheet = aliases.get(resource_type, resource_type)
+        if sheet not in data: raise ValidationError("暂不支持导出该资源类型")
+        if resource_id:
+            list_map = {"object_type": list_object_types(oid), "link_type": list_link_types(oid), "action": list_actions(oid), "business_rule": list_business_rules(oid), "business_domain": list_business_domains(oid), "object_instance": list_object_instances(oid)}
+            enterprise_kinds = {"data_source": "data-sources", "data_mapping": "data-mappings", "action_mapping": "action-mappings", "capability": "capabilities", "permission_policy": "permission-policies"}
+            if resource_type in enterprise_kinds: list_map[resource_type] = list_resources(oid, enterprise_kinds[resource_type])
+            source_items = list_map.get(resource_type, [])
+            index = next((i for i, item in enumerate(source_items) if resource_id in (item.get("id"), item.get("external_id"), item.get("code"), item.get("name"))), None)
+            if index is None: raise NotFoundError("资源不存在")
+            if index >= len(data[sheet]): raise NotFoundError("资源导出行不存在")
+            data = {sheet: [data[sheet][index]]}
+    sheets = [(name[:31], values) for name, values in data.items() if values]
+    def col_name(number):
+        out = ''
+        while number:
+            number, rem = divmod(number - 1, 26); out = chr(65 + rem) + out
+        return out or 'A'
+    def xml_cell(row, col, value):
+        ref = f'{col_name(col + 1)}{row}'
+        text = escape(str(_xlsx_cell(value)))
+        return f'<c r={quoteattr(ref)} t="inlineStr"><is><t>{text}</t></is></c>'
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' + ''.join(f'<Override PartName="/xl/worksheets/sheet{i}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' for i in range(1, len(sheets) + 1)) + '</Types>')
+        archive.writestr('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+        workbook = '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' + ''.join(f'<sheet name={quoteattr(name)} sheetId="{i}" r:id="rId{i}"/>' for i, (name, _) in enumerate(sheets, 1)) + '</sheets></workbook>'
+        archive.writestr('xl/workbook.xml', workbook)
+        archive.writestr('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' + ''.join(f'<Relationship Id="rId{i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet{i}.xml"/>' for i in range(1, len(sheets) + 1)) + '</Relationships>')
+        for i, (name, values) in enumerate(sheets, 1):
+            headers = XLSX_HEADERS.get(name) or [f'字段{j + 1}' for j in range(len(values[0]))]
+            rows = [headers] + values
+            last_col = col_name(max(1, len(headers))); last_row = len(rows)
+            xml_rows = []
+            for row_num, row in enumerate(rows, 1):
+                xml_rows.append(f'<row r="{row_num}">' + ''.join(xml_cell(row_num, col, value) for col, value in enumerate(row)) + '</row>')
+            archive.writestr(f'xl/worksheets/sheet{i}.xml', f'<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1:{last_col}{last_row}"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>{"".join(xml_rows)}</sheetData><autoFilter ref="A1:{last_col}{last_row}"/></worksheet>')
+    return output.getvalue()
+
+
 def overview(oid: str) -> Dict[str, Any]:
     ontology=get_ontology(oid); objects=list_object_types(oid); links=list_link_types(oid); actions=list_actions(oid); rules=list_business_rules(oid); interfaces=list_interfaces(oid); instances=list_object_instances(oid); report=validate_ontology(oid)
     # 工作台把数据映射/数据源数量直接来自这里；静默返回 0 会让"没有映射"和"统计失败"长得一样。
