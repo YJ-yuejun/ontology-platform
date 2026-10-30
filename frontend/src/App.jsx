@@ -4,7 +4,7 @@ import {
   Activity, ArrowLeft, BookOpen, Bot, Boxes, Building2, Check, ChevronDown, ChevronLeft, ChevronRight,
   ClipboardList, Database, FileText, GitBranch, Hammer, History, ListChecks, ListTree, Menu,
   Library, MessageSquareText, Network, Plus, Search, Settings, ShieldCheck, Sparkles, Layers3, TableProperties,
-  Waypoints, Workflow, LogOut, MoreHorizontal, UserRound,
+  Waypoints, Workflow, LogOut, MoreHorizontal, UserRound, Download,
 } from 'lucide-react';
 import { api } from './api';
 import Modal from './components/Modal';
@@ -184,8 +184,29 @@ function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher
 
 function OntologySwitchDialog({ ontologies, activeId, onChoose, onClose, onCreate, onShowDirectory }) {
   const [query, setQuery] = useState('');
+  const [exportBusy, setExportBusy] = useState(false);
+  const active = ontologies.find((item) => item.id === activeId);
   const matches = ontologies.filter((item) => `${item.name} ${item.namespace} ${item.description || ''}`.toLowerCase().includes(query.toLowerCase()));
-  return <Modal title="切换建模本体" subtitle="选择后，当前页面将切换到对应业务语义空间" onClose={onClose} footer={<><button className="btn secondary" onClick={onShowDirectory}><Library size={15} /> 返回本体工作台</button><button className="btn primary" onClick={onCreate}><Plus size={15} /> 新建本体</button></>}>
+  const exportActive = async () => {
+    if (!active || exportBusy) return;
+    setExportBusy(true);
+    try {
+      const response = await fetch(`/api/ontologies/${active.id}/export.xlsx`);
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob();
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = `${active.namespace || active.name}-完整本体.xlsx`;
+      anchor.click();
+      URL.revokeObjectURL(href);
+    } catch (error) {
+      window.alert(error.message || '本体导出失败');
+    } finally {
+      setExportBusy(false);
+    }
+  };
+  return <Modal title="切换建模本体" subtitle="选择后，当前页面将切换到对应业务语义空间" onClose={onClose} footer={<><button className="btn secondary" onClick={exportActive} disabled={!active || exportBusy}><Download size={15} /> {exportBusy ? '导出中…' : '导出当前本体'}</button><button className="btn secondary" onClick={onShowDirectory}><Library size={15} /> 返回本体工作台</button><button className="btn primary" onClick={onCreate}><Plus size={15} /> 新建本体</button></>}>
     <label className="ontology-switch-search"><Search size={16} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索名称、命名空间或说明" /></label>
     <div className="ontology-switch-list">{matches.map((item) => <button key={item.id} className={item.id === activeId ? 'selected' : ''} onClick={() => onChoose(item.id)}><i>{item.name.slice(0, 1)}</i><span><b>{item.name}</b><code>{item.namespace}</code><small>{item.object_type_count} 个对象 · {item.link_type_count} 个关系 · {item.business_rule_count || 0} 条规则 · {item.instance_count || 0} 条实例</small></span>{item.id === activeId ? <em><Check size={13} /> 当前</em> : <ChevronRight size={15} />}</button>)}{!matches.length && <p>没有匹配的本体</p>}</div>
   </Modal>;
