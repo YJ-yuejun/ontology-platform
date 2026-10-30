@@ -125,7 +125,10 @@ export default function Overview({ activeId, active, refreshOntologies, notify }
       if (!response.ok) throw new Error(await response.text());
       const blob = await response.blob();
       const href = URL.createObjectURL(blob);
-      const anchor = document.createElement('a'); anchor.href = href; anchor.download = `${active.namespace || active.name}-${resourceType ? '资源' : '完整本体'}.xlsx`; anchor.click(); URL.revokeObjectURL(href);
+      const stamp = `${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}Z`;
+      const scope = resourceType ? `RESOURCE-${resourceType.toUpperCase()}` : 'FULL';
+      const resourceToken = resourceId ? `-${resourceId}` : '';
+      const anchor = document.createElement('a'); anchor.href = href; anchor.download = `${active.namespace || active.name}-ONTOLOGY-${scope}${resourceToken}-${stamp}.xlsx`; anchor.click(); URL.revokeObjectURL(href);
       setExportOpen(false); notify(resourceType ? '资源 Excel 已导出' : '完整本体 Excel 已导出');
     } catch (e) { notify(e.message || '导出失败'); } finally { setExportBusy(false); }
   };

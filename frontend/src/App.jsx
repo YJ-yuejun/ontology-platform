@@ -197,7 +197,8 @@ function OntologySwitchDialog({ ontologies, activeId, onChoose, onClose, onCreat
       const href = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = href;
-      anchor.download = `${active.namespace || active.name}-完整本体.xlsx`;
+      const stamp = `${new Date().toISOString().slice(0, 19).replace(/[-:]/g, '')}Z`;
+      anchor.download = `${active.namespace || active.name}-ONTOLOGY-FULL-${stamp}.xlsx`;
       anchor.click();
       URL.revokeObjectURL(href);
     } catch (error) {

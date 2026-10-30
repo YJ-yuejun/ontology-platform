@@ -52,7 +52,22 @@
 
 模板中存在但当前没有可导出规范化数据的 Sheet 不生成空表；模板原始行仍通过现有 JSON 数据包和资源元数据保留，后续可扩展为“原始模板行”附加 Sheet。
 
-## 4. 数据规则
+## 4. 文件命名规范
+
+所有 Excel 导出文件统一使用以下格式：
+
+```text
+{本体命名空间}-ONTOLOGY-{导出范围}[-{资源ID}]-{UTC时间}.xlsx
+```
+
+- 完整本体：`{namespace}-ONTOLOGY-FULL-{YYYYMMDDTHHmmssZ}.xlsx`。
+- 单资源：`{namespace}-ONTOLOGY-RESOURCE-{RESOURCE_TYPE}-{resource_id}-{YYYYMMDDTHHmmssZ}.xlsx`。
+- `RESOURCE_TYPE` 使用接口参数中的英文资源类型并转为大写，例如 `ACTION`、`OBJECT_TYPE`、`BUSINESS_RULE`。
+- 时间统一使用 UTC，格式为 `YYYYMMDDTHHmmssZ`，便于排序、检索和跨时区协作。
+- 文件名中的本体命名空间和资源 ID 只使用字母、数字、点、下划线和连字符；展示名称中的空格和特殊字符不作为文件名主标识。
+- 浏览器响应同时提供兼容文件名 `ontology-export.xlsx` 和 UTF-8 `filename*`，确保中文环境与不同浏览器都能正常下载。
+
+## 5. 数据规则
 
 - 使用当前本体工作状态，不要求先发布版本。
 - 对象、关系、动作、规则等稳定 ID优先使用业务 external_id/code；没有业务 ID时使用内部 ID。

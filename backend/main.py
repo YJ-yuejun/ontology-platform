@@ -565,8 +565,11 @@ def export_ontology_xlsx(ontology_id: str, resource_type: Optional[str] = None, 
     except repo.ValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     ontology = repo.get_ontology(ontology_id)
-    suffix = f"-{resource_type}" if resource_type else "-完整本体"
-    filename = f"{ontology.get('namespace') or ontology.get('name')}{suffix}.xlsx"
+    export_stamp = repo.now()[:19].replace("-", "").replace(":", "") + "Z"
+    scope = "FULL" if not resource_type else f"RESOURCE-{resource_type.upper()}"
+    resource_token = f"-{resource_id}" if resource_id else ""
+    base_name = ontology.get("namespace") or ontology.get("name") or "ontology"
+    filename = f"{base_name}-ONTOLOGY-{scope}{resource_token}-{export_stamp}.xlsx"
     from urllib.parse import quote
     safe_filename = "ontology-export.xlsx"
     encoded_filename = quote(filename)
