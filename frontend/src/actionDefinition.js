@@ -16,7 +16,7 @@ export function actionForm(item = {}, dictionary = []) {
   const config = item.definition_config || {};
   return {
     external_id: item.external_id || raw.行动ID || '', display_name: item.display_name || '', name: item.name || '',
-    action_category: actionCategoryCode(item.action_category || raw.行动类型, dictionary),
+    action_category: actionCategoryCode(item.action_category || raw.动作类型, dictionary),
     target_object_type_id: item.target_object_type_id || '', description: item.description || '',
     parameters: (item.parameters || []).map(parameterRow),
     precondition_text: item.precondition_text ?? raw.前置条件 ?? (item.preconditions || []).map((entry) => entry.expression).join('；'),
@@ -26,6 +26,9 @@ export function actionForm(item = {}, dictionary = []) {
     side_effects_text: item.side_effects_text ?? raw['副作用/联动'] ?? (item.side_effects || []).join('、'),
     action_type: item.action_type || 'invoke', approval_required: Boolean(item.approval_required),
     owner: item.owner || raw.责任人 || '', design_status: designStatusValue(item.design_status || raw.状态),
+    status: item.status || 'experimental',
+    trigger_rule_codes: Array.isArray(item.trigger_rule_codes) ? [...item.trigger_rule_codes] : [],
+    trigger_rule_names: Array.isArray(item.trigger_rules) ? [...item.trigger_rules] : [],
     definition_version: item.definition_version || 'v1.0',
     definition_config: { ...copy(config), schema_version: 1, definition_mode: config.definition_mode || 'text',
       formula: { expression_text: '', variables_text: '', example_text: '', ...config.formula },
@@ -74,11 +77,11 @@ export function actionPayload(form, original) {
 
 export function validateActionForm(form, items = [], editingId = null) {
   const errors = [];
-  for (const [key, title] of [['external_id', '行动编号'], ['display_name', '行动名称'], ['name', 'API 名称'], ['action_category', '行动类型'], ['target_object_type_id', '作用对象'], ['execution_logic', '执行逻辑'], ['owner', '责任人']]) {
+  for (const [key, title] of [['external_id', '动作编号'], ['display_name', '动作名称'], ['name', 'API 名称'], ['action_category', '动作类型'], ['target_object_type_id', '作用对象'], ['execution_logic', '执行逻辑'], ['owner', '责任人']]) {
     if (!String(form[key] || '').trim()) errors.push(`${title}不能为空`);
   }
   if (form.name && !/^[a-z][a-z0-9_]*$/.test(form.name.trim())) errors.push('API 名称须以小写字母开头，仅包含小写字母、数字和下划线');
-  for (const [key, title] of [['external_id', '行动编号'], ['display_name', '行动名称'], ['name', 'API 名称']]) {
+  for (const [key, title] of [['external_id', '动作编号'], ['display_name', '动作名称'], ['name', 'API 名称']]) {
     if (items.some((item) => item.id !== editingId && item[key]?.trim() === form[key]?.trim())) errors.push(`同一本体中${title}已存在`);
   }
   const keys = new Set();
@@ -107,12 +110,16 @@ export function nextActionCode(items) {
   while (items.some((item) => item.name === businessApiName(`A-${String(number).padStart(3, '0')}`))) number += 1;
   return `A-${String(number).padStart(3, '0')}`;
 }
-export function businessActionForm(item, dictionary = [], items = []) {
+export function businessActionForm(item, dictionary = [], items = [], rules = []) {
   const form = actionForm(item || {}, dictionary);
+  const ruleCodes = form.trigger_rule_codes.length ? form.trigger_rule_codes : rules.filter((rule) => form.trigger_rule_names.includes(rule.code) || form.trigger_rule_names.includes(rule.name) || form.trigger_rule_names.includes(rule.display_name)).map((rule) => rule.code);
   return { ...form,
+    // This is a read-only preview for new records; the POST payload omits it and the server allocates the final ID.
     external_id: form.external_id || nextActionCode(items),
     target_role: item?.target_role ?? item?.template_raw?.作用对象 ?? item?.target_display_name ?? '',
     input_parameters_text: item?.input_parameters_text ?? item?.template_raw?.输入参数 ?? form.parameters.map((p) => p.name).join('、'),
+    trigger_rule_codes: ruleCodes,
+    trigger_rule_names: ruleCodes.map((code) => rules.find((rule) => rule.code === code)?.name || ruleCodes.find((value) => value === code) || code),
     owner: form.owner || '示例负责人',
   };
 }
@@ -133,33 +140,36 @@ export function businessActionPayload(form, original) {
   const originalText = original?.input_parameters_text ?? original?.template_raw?.输入参数 ?? (original?.parameters || []).map((p) => p.name).join('、');
   const unchanged = Boolean(original) && form.input_parameters_text === originalText;
   const payload = {
-    name: original?.name || businessApiName(form.external_id), display_name: form.display_name.trim(),
-    external_id: form.external_id.trim(), action_category: form.action_category,
-    target_object_type_id: form.target_object_type_id, target_role: form.target_role.trim(),
+    name: original?.name || businessApiName(form.external_id || form.display_name), display_name: form.display_name.trim(),
+    action_category: form.action_category, target_object_type_id: form.target_object_type_id,
     input_parameters_text: form.input_parameters_text, precondition_text: form.precondition_text,
+    trigger_rule_codes: [...(form.trigger_rule_codes || [])], trigger_rules: [...(form.trigger_rule_names || [])],
     execution_logic: form.execution_logic, object_effect: form.object_effect, result_text: form.result_text,
     side_effects_text: form.side_effects_text, approval_required: form.approval_required,
-    owner: form.owner.trim(), design_status: form.design_status,
+    owner: form.owner.trim(), status: form.status || 'experimental', design_status: form.design_status,
   };
+  // New IDs are allocated atomically by the server. Existing IDs remain immutable.
+  if (original) {
+    payload.external_id = form.external_id.trim();
+    // Preserve a historical role snapshot only when the target object itself
+    // was not changed; a changed object must not retain the old label.
+    payload.target_role = original.target_object_type_id === form.target_object_type_id ? (form.target_role || '') : '';
+  }
   if (!unchanged) payload.parameters = businessParameters(form.input_parameters_text, original?.parameters || []);
-  // Preserve all existing technical configuration and structured conditions on edit.
   if (original) payload.expected_updated_at = original.updated_at;
-  else Object.assign(payload, { action_type: 'invoke', definition_version: 'v1.0',
-    definition_config: { schema_version: 1, definition_mode: 'text' } });
+  else Object.assign(payload, { action_type: 'invoke', definition_version: 'v1.0', definition_config: { schema_version: 1, definition_mode: 'text' } });
   return payload;
 }
 export function validateBusinessAction(form, items = [], original) {
   const errors = [];
-  for (const [key, label] of [['external_id', '行动ID'], ['display_name', '行动名称'], ['action_category', '行动类型'], ['target_object_type_id', '作用对象'], ['execution_logic', '执行逻辑'], ['owner', '责任人']]) {
+  for (const [key, label] of [['display_name', '动作名称'], ['action_category', '动作类型'], ['target_object_type_id', '作用对象'], ['execution_logic', '执行逻辑'], ['owner', '责任人']]) {
     if (!String(form[key] || '').trim()) errors.push(`${label}不能为空`);
   }
-  for (const [key, label] of [['external_id', '行动ID'], ['display_name', '行动名称']]) {
-    if (items.some((item) => item.id !== original?.id && item[key]?.trim() === form[key]?.trim())) errors.push(`同一本体中${label}已存在`);
-  }
-  if (!['draft', 'validated'].includes(form.design_status)) errors.push('请选择有效状态');
+  if (items.some((item) => item.id !== original?.id && item.display_name?.trim() === form.display_name?.trim())) errors.push('同一本体中动作名称已存在');
+  if (original && items.some((item) => item.id !== original.id && item.external_id?.trim() === form.external_id?.trim())) errors.push('同一本体中动作ID已存在');
+  if (!['draft', 'validated'].includes(form.design_status)) errors.push('请选择有效建模状态');
+  if (!['active', 'experimental', 'deprecated', 'example'].includes(form.status)) errors.push('请选择有效资源使用状态');
   if (typeof form.approval_required !== 'boolean') errors.push('请选择是否需审批');
-  const name = original?.name || businessApiName(form.external_id);
-  if (items.some((item) => item.id !== original?.id && item.name === name)) errors.push('该行动ID生成的内部标识已存在，请更换行动ID');
   try { businessActionPayload(form, original); } catch (cause) { errors.push(cause.message); }
-  return errors;
+  return [...new Set(errors)];
 }
