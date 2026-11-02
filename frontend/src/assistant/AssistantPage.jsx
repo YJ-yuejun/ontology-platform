@@ -6,6 +6,7 @@ import {
 import { api, formatTime } from '../api';
 import { useAssistant } from './AssistantContext';
 import { RESOURCE_TYPE_LABELS, quickActions } from './selection';
+import ScenarioDiscoveryCard from './ScenarioDiscoveryCard';
 
 const MODEL_LABEL = 'DeepSeek V4 Flash';
 const MAX_CHARS = 8000;
@@ -14,6 +15,7 @@ const STARTERS = [
   '哪些对象还没有完成属性映射？',
   '当前本体有哪些规则和动作？',
   '解释一下如何从业务主题定位对象',
+  '在共享运营业务量本体中，从业务量、负载和预警事件出发，提前识别容量风险并生成调度建议。',
 ];
 
 function relativeTime(value) {
@@ -130,7 +132,7 @@ export default function AssistantPage() {
           <i><Bot size={28} /></i>
           <h2>选中资源，或直接问当前本体</h2>
           <p>{messages[0]?.text || '我是本体智能。选中页面上的对象、属性或关系，我可以解释定义、检查口径，或起草修改建议。'}</p>
-          <div className="agent-starter-grid">{STARTERS.map((item, index) => <button type="button" key={item} onClick={() => assistant.send(item)} disabled={busy}><span>{index + 1}</span><b>{item}</b><ChevronRight size={14} /></button>)}</div>
+          <div className="agent-starter-grid">{STARTERS.map((item, index) => <button type="button" key={item} className={index === 4 ? 'wide' : ''} onClick={() => assistant.send(item)} disabled={busy}><span>{index + 1}</span><b>{item}</b><ChevronRight size={14} /></button>)}</div>
           <small>点左下角“+”打开本体资源面板；也可以先到对象属性、图谱等页面选择资源，再回来提问。</small>
         </section> : messages.map((message, index) => <article className={`agent-thread-message ${message.role} ${message.error ? 'error' : ''}`} key={index}>
           <span className="agent-thread-avatar">{message.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}</span>
@@ -141,6 +143,7 @@ export default function AssistantPage() {
             {message.trace?.length > 0 && <details className="agent-trace"><summary>查看本体工具轨迹 · {message.trace.length} 步</summary>{message.trace.map((step, traceIndex) => <span key={traceIndex}><em>{traceIndex + 1}</em><b>{step.label}</b><small>{step.result}</small><CheckCircle2 size={13} /></span>)}</details>}
             {message.runMode && <small className="agent-run-mode">{message.runMode === 'deepseek' ? 'DeepSeek 实际运行' : '演示降级模式'}</small>}
             {message.proposal && <small className="agent-run-mode">已生成动作提案，未执行</small>}
+            {(message.scenarioDiscovery || message.scenario_discovery) && <ScenarioDiscoveryCard discovery={message.scenarioDiscovery || message.scenario_discovery} />}
           </div>
         </article>)}
         {busy && <article className="agent-thread-message assistant"><span className="agent-thread-avatar"><Bot size={16} /></span><div className="agent-thread-body"><p className="agent-thinking"><LoaderCircle className="spin" size={15} /> 正在读取选中资源与本体上下文…</p></div></article>}

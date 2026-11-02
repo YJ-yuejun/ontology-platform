@@ -492,3 +492,48 @@ body.ai-picking .vis-network, body.ai-picking .vis-network canvas { cursor: cros
 .assistant-msg-resources i { color: #6f8ca2; font-size: 7.5px; font-style: normal; white-space: nowrap; }
 .assistant-msg.user .assistant-msg-resources i { color: rgba(255,255,255,.72); }
 .assistant-msg-resources b { overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 本体智能 · AI 场景资源包卡片 */
+.agent-starter-grid button.wide { grid-column:1 / -1; }
+.scenario-discovery-card { margin-top:9px; overflow:hidden; background:#fbfdff; border:1px solid #d6e5ef; border-radius:6px; }
+.scenario-discovery-card > header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 9px; background:#f2f8fc; border-bottom:1px solid #dfebf2; }
+.scenario-discovery-title { display:flex; align-items:center; gap:6px; min-width:0; }
+.scenario-discovery-title > span { display:inline-flex; align-items:center; gap:4px; color:#28698f; font-size:10px; font-weight:650; }
+.scenario-discovery-title > span svg { color:#6a50ad; }
+.scenario-discovery-title small { overflow:hidden; color:#8c9da8; font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.scenario-discovery-toggle { flex:none; min-height:24px; display:inline-flex; align-items:center; gap:3px; padding:0 6px; color:#2c6d95; background:#fff; border:1px solid #c9dfec; border-radius:3px; font-size:8px; cursor:pointer; }
+.scenario-discovery-layout { display:grid; grid-template-columns:minmax(0,1fr); }
+.scenario-discovery-card.expanded .scenario-discovery-layout { grid-template-columns:minmax(0,1.05fr) minmax(250px,.95fr); }
+.scenario-discovery-summary { min-width:0; padding:9px; }
+.scenario-discovery-goal span { display:block; color:#8497a5; font-size:8px; }
+.scenario-discovery-goal b { display:block; margin-top:3px; color:#365a70; font-size:9.5px; font-weight:600; line-height:1.55; }
+.scenario-discovery-metrics { display:flex; flex-wrap:wrap; gap:4px; margin-top:7px; }
+.scenario-discovery-metrics span { padding:3px 5px; color:#7b909e; background:#fff; border:1px solid #e1ebf1; border-radius:3px; font-size:8px; }
+.scenario-discovery-metrics b { margin-right:2px; color:#33708f; font-size:11px; }
+.scenario-discovery-groups { display:grid; grid-template-columns:1fr 1fr; gap:5px; margin-top:7px; }
+.scenario-discovery-groups > div { min-width:0; padding:5px; background:#fff; border:1px solid #e7eef3; border-radius:3px; }
+.scenario-discovery-groups > div > span { display:flex; align-items:center; justify-content:space-between; color:#78909f; font-size:8px; }
+.scenario-discovery-groups em { color:#9aa9b3; font-style:normal; }
+.scenario-discovery-groups > div > div { display:flex; flex-wrap:wrap; gap:3px; margin-top:4px; }
+.scenario-discovery-groups i { max-width:100%; overflow:hidden; padding:2px 4px; color:#466980; background:#f5fafc; border:1px solid #e3edf2; border-radius:2px; font-size:8px; font-style:normal; text-overflow:ellipsis; white-space:nowrap; }
+.scenario-discovery-groups small { color:#a0adb6; font-size:8px; }
+.scenario-discovery-evidence { display:block; margin-top:7px; color:#91a0aa; font-size:7.5px; line-height:1.45; }
+.scenario-discovery-form { min-width:0; padding:9px; background:#fff; border-left:1px solid #e1ebf1; }
+.scenario-discovery-form-head { display:flex; align-items:baseline; justify-content:space-between; gap:5px; margin-bottom:6px; }
+.scenario-discovery-form-head span { color:#3d6178; font-size:9px; font-weight:650; }
+.scenario-discovery-form-head small { color:#96a5ae; font-size:7.5px; text-align:right; }
+.scenario-discovery-form label { display:block; margin-top:6px; color:#69808f; font-size:8px; font-weight:600; }
+.scenario-discovery-form label > span { display:block; margin-bottom:3px; }
+.scenario-discovery-form input, .scenario-discovery-form textarea { width:100%; padding:5px 6px; color:#34566b; background:#fbfdfe; border:1px solid #d3e1e9; border-radius:3px; outline:0; font-size:8.5px; font-weight:400; resize:vertical; }
+.scenario-discovery-form textarea { min-height:48px; }
+.scenario-discovery-form-note { display:flex; align-items:flex-start; gap:4px; margin-top:7px; color:#8b9ba6; font-size:7.5px; line-height:1.45; }
+.scenario-discovery-form-note svg { flex:none; margin-top:1px; color:#6e8da0; }
+.scenario-discovery-apply { width:100%; min-height:28px; display:flex; align-items:center; justify-content:center; gap:4px; margin-top:7px; color:#fff; background:#2f71a7; border:1px solid #2f71a7; border-radius:3px; font-size:8.5px; cursor:pointer; }
+.scenario-discovery-apply:hover { background:#255f8e; }
+.assistant-chat.compact .scenario-discovery-card.expanded .scenario-discovery-layout { grid-template-columns:1fr; }
+.assistant-chat.compact .scenario-discovery-form { border-left:0; border-top:1px solid #e1ebf1; }
+@media (max-width:700px) {
+  .scenario-discovery-card.expanded .scenario-discovery-layout { grid-template-columns:1fr; }
+  .scenario-discovery-form { border-left:0; border-top:1px solid #e1ebf1; }
+  .scenario-discovery-title small { display:none; }
+}

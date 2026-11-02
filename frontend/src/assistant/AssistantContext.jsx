@@ -180,6 +180,7 @@ export function AssistantProvider({ activeId, active, notify, children }) {
         trace: result.trace || [],
         runMode: result.run_mode,
         proposal: result.action_proposal,
+        scenarioDiscovery: result.scenario_discovery,
       }]);
       setRevision((value) => value + 1);
     } catch (error) {
@@ -211,7 +212,7 @@ export function AssistantProvider({ activeId, active, notify, children }) {
 
   const loadConversation = useCallback((conversation) => {
     const nextMessages = (conversation.messages || []).map((message) => message.role === 'assistant'
-      ? { ...message, runMode: message.run_mode || message.runMode }
+      ? { ...message, runMode: message.run_mode || message.runMode, scenarioDiscovery: message.scenario_discovery || message.scenarioDiscovery }
       : message);
     setConversationId(conversation.id);
     setMessages(nextMessages);

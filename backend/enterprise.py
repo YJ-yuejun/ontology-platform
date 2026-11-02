@@ -1774,10 +1774,71 @@ def _selection_detail_answer(ontology_id: str, selection: list) -> Optional[str]
     return None
 
 
+def _discover_scenario_resources(ontology_id: str, message: str) -> Optional[Dict[str, Any]]:
+    """Build a reviewable scenario package from current ontology resources.
+
+    This is deliberately deterministic in the prototype: the model may phrase
+    the answer, but resource selection stays inspectable and references only
+    current-ontology objects, links, rules, actions and data sources.
+    """
+    haystack = message.lower()
+    objects = repo.list_object_types(ontology_id)
+    links = repo.list_link_types(ontology_id)
+    rules = repo.list_business_rules(ontology_id)
+    actions = repo.list_actions(ontology_id)
+    sources = list_resources(ontology_id, "data-sources")
+    mappings = list_resources(ontology_id, "data-mappings")
+
+    def match_text(item: Dict[str, Any]) -> bool:
+        return any(value and str(value).lower() in haystack for value in (item.get("display_name"), item.get("name"), item.get("description")))
+
+    matched_objects = [item for item in objects if match_text(item)]
+    object_ids = {item["id"] for item in matched_objects}
+    object_names = {item["name"] for item in matched_objects}
+    matched_links = [item for item in links if (item.get("source_object_type_id") in object_ids and item.get("target_object_type_id") in object_ids) or match_text(item)]
+    matched_rules = [item for item in rules if item.get("target_object_type_id") in object_ids or match_text(item)]
+    matched_actions = [item for item in actions if item.get("target_object_type_id") in object_ids or match_text(item)]
+    mapping_sources = {item.get("source_code") for item in mappings if item.get("target_object_type") in object_names and item.get("source_code")}
+    matched_sources = [item for item in sources if item.get("code") in mapping_sources or match_text(item)]
+    if not matched_objects:
+        return None
+    if "业务量" in message and ("预警" in message or "调度" in message):
+        name = "业务量风险预警与调度"
+        trigger = "业务量或负载预测超过阈值，或出现预警事件"
+    elif "付款" in message or "采购" in message:
+        name = "采购付款合规审查"
+        trigger = "付款申请提交或命中合规风险"
+    else:
+        name = "AI 识别业务场景"
+        trigger = "业务事件或人工发起"
+    confidence = min(0.95, 0.62 + 0.04 * len(matched_objects) + 0.02 * len(matched_links))
+    def compact(items):
+        return [{"id": item.get("id"), "name": item.get("name"), "code": item.get("code"), "display_name": item.get("display_name") or item.get("name")} for item in items]
+    return {
+        "name": name,
+        "business_goal": message,
+        "trigger_condition": trigger,
+        "description": "由 AI 从当前本体资源中发现的场景资源包；请人工确认资源和范围后保存为设计中场景。",
+        "objects": compact(matched_objects),
+        "links": compact(matched_links),
+        "rules": compact(matched_rules),
+        "actions": compact(matched_actions),
+        "sources": [{"id": item.get("id"), "code": item.get("code"), "name": item.get("name"), "display_name": item.get("name")} for item in matched_sources],
+        "confidence": round(confidence, 2),
+        "evidence": [item.get("display_name") or item.get("name") for item in matched_objects[:6]],
+        "note": "AI 只生成候选资源包，不自动保存、不自动发布。",
+    }
+
+
 def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
     ontology = repo.get_ontology(ontology_id)
     objects, links, rules, actions = repo.list_object_types(ontology_id), repo.list_link_types(ontology_id), repo.list_business_rules(ontology_id), repo.list_actions(ontology_id)
     trace = [{"tool": "ontology.search", "label": "检索本体资源", "status": "completed", "result": f"命中 {len(objects)} 类对象、{len(links)} 类关系"}]
+    scenario_discovery = None
+    if "业务量" in request.message and ("预警" in request.message or "调度" in request.message):
+        scenario_discovery = _discover_scenario_resources(ontology_id, request.message)
+        if scenario_discovery:
+            trace.append({"tool": "scenario.package", "label": "识别业务场景资源包", "status": "completed", "result": f"{len(scenario_discovery['objects'])} 个对象、{len(scenario_discovery['links'])} 条关系、{len(scenario_discovery['rules'])} 条规则、{len(scenario_discovery['actions'])} 个动作"})
     action_proposal = None
     risky = any(word in request.message for word in ("关闭", "停机", "删除", "审批", "付款", "执行"))
     matching_action = next((item for item in actions if any(token in request.message for token in item["display_name"].replace("Action", "").split())), None)
@@ -1823,6 +1884,10 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
             answer = "当前是“管道运输运营本体”，没有付款申请、采购合同和预算对象。为了避免跨域猜测，请先切换到“采购与财务协同本体”，我再沿付款 → 合同 / 预算 / 供应商 / 发票 / 审查任务回答。"
         else:
             answer = f"当前“{ontology['name']}”包含 {len(objects)} 类对象、{len(links)} 类关系、{len(rules)} 条规则和 {len(actions)} 个动作。我会先沿对象与关系定位业务上下文，再调用确定性规则；只有需要解释的部分交给模型。"
+    if scenario_discovery:
+        answer = (answer.rstrip() + "\n\n我把它整理成一个可审核的业务场景资源包："
+                  f"对象 {len(scenario_discovery['objects'])} 个、关系 {len(scenario_discovery['links'])} 条、规则 {len(scenario_discovery['rules'])} 条、行动 {len(scenario_discovery['actions'])} 个、关联系统 {len(scenario_discovery['sources'])} 个。"
+                  "你可以在回答下方展开表单调整场景名称、目标和触发条件，再应用到业务场景创建弹窗。AI 不会直接保存或发布。")
     interaction_id, timestamp = str(uuid.uuid4()), repo.now()
     conversation_id = str((request.context or {}).get("conversation_id") or "").strip() or str(uuid.uuid4())
     conn = repo.get_conn()
@@ -1831,11 +1896,11 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
         VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
         (interaction_id, ontology_id, request.message, answer, _json(trace),
          _json(action_proposal) if action_proposal else None, run_mode, "deepseek-v4-flash",
-         timestamp, conversation_id, _json(request.context or {})))
+         timestamp, conversation_id, _json({**(request.context or {}), **({"scenario_discovery": scenario_discovery} if scenario_discovery else {})})))
     conn.commit()
     conn.close()
     return {"id": interaction_id, "conversation_id": conversation_id, "answer": answer, "trace": trace,
-            "action_proposal": action_proposal, "model": "deepseek-v4-flash", "run_mode": run_mode}
+            "action_proposal": action_proposal, "scenario_discovery": scenario_discovery, "model": "deepseek-v4-flash", "run_mode": run_mode}
 
 
 def agent_history(ontology_id: str, limit: int = 100) -> Dict[str, Any]:
@@ -1887,8 +1952,8 @@ def agent_history(ontology_id: str, limit: int = 100) -> Dict[str, Any]:
             }
             assistant_message = {
                 "role": "assistant", "text": item["answer"], "trace": trace,
-                "action_proposal": action_proposal, "run_mode": item["run_mode"],
-                "model": item["model"], "created_at": item["created_at"],
+                "action_proposal": action_proposal, "scenario_discovery": context.get("scenario_discovery"),
+                "run_mode": item["run_mode"], "model": item["model"], "created_at": item["created_at"],
             }
             messages.append(user_message)
             messages.append(assistant_message)

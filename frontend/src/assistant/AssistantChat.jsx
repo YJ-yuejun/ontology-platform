@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Bot, LoaderCircle, Paperclip, Scan, Send, User } from 'lucide-react';
 import { useAssistant } from './AssistantContext';
 import { RESOURCE_TYPE_LABELS, quickActions } from './selection';
+import ScenarioDiscoveryCard from './ScenarioDiscoveryCard';
 
 export default function AssistantChat({ compact = false, showPicker = true }) {
   const assistant = useAssistant();
@@ -35,6 +36,7 @@ export default function AssistantChat({ compact = false, showPicker = true }) {
             </div>)}
           </details>}
           {message.runMode && <small className="assistant-runmode">{message.runMode === 'deepseek' ? 'DeepSeek 运行' : '演示降级模式'}</small>}
+          {(message.scenarioDiscovery || message.scenario_discovery) && <ScenarioDiscoveryCard discovery={message.scenarioDiscovery || message.scenario_discovery} />}
         </div>
       </article>)}
       {busy && <article className="assistant-msg assistant">

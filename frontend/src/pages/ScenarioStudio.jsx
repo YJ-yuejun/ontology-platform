@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { ChevronRight, Pencil, Plus, Search, Sparkles, Trash2, Workflow, X } from 'lucide-react';
 import { api } from '../api';
 import Modal from '../components/Modal';
@@ -59,6 +60,8 @@ function ResourcePicker({ label, items, value, onChange, codeKey = 'name', label
 }
 
 export default function ScenarioStudio({ activeId, notify }) {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [items, setItems] = useState(null);
   const [objects, setObjects] = useState([]);
   const [links, setLinks] = useState([]);
@@ -105,6 +108,20 @@ export default function ScenarioStudio({ activeId, notify }) {
   };
 
   useEffect(() => { setItems(null); load(); }, [activeId]);
+
+  useEffect(() => {
+    const draft = location.state?.scenarioDraft;
+    if (!draft) return;
+    setSelected(null);
+    closeDetail();
+    setEditing({ create: true, item: null });
+    setForm({
+      ...emptyForm(), name: draft.name || '', business_goal: draft.business_goal || '', trigger_condition: draft.trigger_condition || '',
+      related_objects: draft.objects || [], related_links: draft.links || [], related_rules: draft.rules || [],
+      related_actions: draft.actions || [], source_codes: draft.sources || [],
+    });
+    navigate(location.pathname, { replace: true });
+  }, [location.state]);
 
   const filtered = useMemo(() => (items || []).filter((item) => `${item.code} ${item.name} ${item.business_goal || ''} ${item.trigger_condition || ''}`.toLowerCase().includes(query.toLowerCase())), [items, query]);
   const pages = Math.max(1, Math.ceil(filtered.length / pageSize));
