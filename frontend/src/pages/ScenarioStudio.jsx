@@ -10,7 +10,6 @@ const emptyForm = () => ({
   related_objects: [], related_links: [], related_rules: [], related_actions: [], source_codes: [],
 });
 const statusLabel = { active: '已发布', draft: '设计中', experimental: '试验中', proposal: '建议中', deprecated: '已废弃' };
-const selectedValues = (event) => [...event.target.selectedOptions].map((option) => option.value);
 
 function ResourceCell({ codes, items, codeKey = 'name' }) {
   const values = (codes || []).map((code) => {
@@ -21,8 +20,35 @@ function ResourceCell({ codes, items, codeKey = 'name' }) {
   return <span className="scenario-table-ids" title={values.join('、')}>{values.join('、')}</span>;
 }
 
-function MultiSelect({ label, items, value, onChange, codeKey = 'name', labelKey = 'display_name' }) {
-  return <label className="scenario-simple-field"><span>{label}<em>{value.length}</em></span><select multiple value={value} onChange={(event) => onChange(selectedValues(event))} className="scenario-simple-multi">{items.map((item) => <option key={item.id || item[codeKey]} value={item[codeKey]}>{(item[labelKey] || item.name || item[codeKey])} · {item[codeKey]}</option>)}</select><small>按住 Ctrl / Command 多选；保存的是资源 code 列表。</small></label>;
+function ResourcePicker({ label, items, value, onChange, codeKey = 'name', labelKey = 'display_name', detail, multiple = true }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [draft, setDraft] = useState(value || []);
+  useEffect(() => { if (open) { setDraft(value || []); setSearch(''); } }, [open, value]);
+  const selected = value || [];
+  const selectedItems = selected.map((code) => items.find((item) => item[codeKey] === code)).filter(Boolean);
+  const needle = search.trim().toLowerCase();
+  const filtered = items.filter((item) => {
+    const text = `${item[labelKey] || ''} ${item[codeKey] || ''} ${detail ? detail(item) : ''}`.toLowerCase();
+    return !needle || text.includes(needle);
+  });
+  const toggle = (code) => setDraft((current) => multiple ? (current.includes(code) ? current.filter((item) => item !== code) : [...current, code]) : [code]);
+  const apply = () => { onChange(draft); setOpen(false); };
+  return <>
+    <div className="scenario-picker-field">
+      <div className="scenario-picker-head"><span>{label}<em>{selected.length}</em></span><button type="button" onClick={() => setOpen(true)}>{selected.length ? '修改选择' : '选择资源'}</button></div>
+      {selectedItems.length ? <div className="scenario-picker-chips">{selectedItems.map((item) => <span key={item.id || item[codeKey]} title={item[codeKey]}>{item[labelKey] || item[codeKey]}<button type="button" aria-label={`移除 ${item[labelKey] || item[codeKey]}`} onClick={() => onChange(selected.filter((code) => code !== item[codeKey]))}>×</button></span>)}</div> : <p className="scenario-picker-empty">未选择</p>}
+    </div>
+    {open && <Modal wide title={`选择${label}`} subtitle={multiple ? '可多选；确认后写入当前场景草稿。' : '单选；确认后写入当前场景草稿。'} onClose={() => setOpen(false)} footer={<><span className="scenario-picker-foot-count">已选 {draft.length} 项</span><button type="button" className="btn secondary" onClick={() => setDraft([])}>清空</button><button type="button" className="btn secondary" onClick={() => setOpen(false)}>取消</button><button type="button" className="btn primary" onClick={apply}>应用选择</button></>}>
+      <div className="scenario-picker-modal-body">
+        <label className="scenario-picker-search"><Search size={15} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`搜索${label}`} /></label>
+        <div className="scenario-picker-options">{filtered.map((item) => {
+          const code = item[codeKey];
+          return <label key={item.id || code} className={draft.includes(code) ? 'selected' : ''}><input type={multiple ? 'checkbox' : 'radio'} checked={draft.includes(code)} onChange={() => toggle(code)} /><span><b>{item[labelKey] || code}</b><code>{code}</code>{detail && detail(item) && <small>{detail(item)}</small>}</span></label>;
+        })}{!filtered.length && <div className="scenario-picker-no-result">没有匹配的资源</div>}</div>
+      </div>
+    </Modal>}
+  </>;
 }
 
 export default function ScenarioStudio({ activeId, notify }) {
@@ -184,10 +210,10 @@ export default function ScenarioStudio({ activeId, notify }) {
         <div className="form-grid two"><label><span>场景ID</span><input required disabled={!editing.create} value={form.code} onChange={(event) => setForm({ ...form, code: event.target.value })} placeholder="SCN-001" /><small>保存后不可修改，同本体唯一。</small></label><label><span>业务场景</span><input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label></div>
         <label><span>业务目标 / 任务</span><textarea required value={form.business_goal} onChange={(event) => setForm({ ...form, business_goal: event.target.value })} placeholder="用一句话说明场景要完成的业务任务" /></label>
         <label><span>触发条件</span><textarea required value={form.trigger_condition} onChange={(event) => setForm({ ...form, trigger_condition: event.target.value })} placeholder="什么事件、时间或数据变化触发这个场景" /></label>
-        <div className="form-grid two"><MultiSelect label="主要对象ID" items={objects} value={form.related_objects} onChange={(value) => setForm({ ...form, related_objects: value })} /><MultiSelect label="关键关系ID" items={links} value={form.related_links} onChange={(value) => setForm({ ...form, related_links: value })} /></div>
-        <div className="form-grid two"><MultiSelect label="规则ID" items={rules} value={form.related_rules} onChange={(value) => setForm({ ...form, related_rules: value })} /><MultiSelect label="行动ID" items={actions} value={form.related_actions} onChange={(value) => setForm({ ...form, related_actions: value })} /></div>
-        <MultiSelect label="关联的公司系统" items={sources} value={form.source_codes} onChange={(value) => setForm({ ...form, source_codes: value })} codeKey="code" labelKey="name" />{!form.source_codes.length && editing?.item?.connected_systems && <p className="scenario-simple-legacy">历史关联系统文本：{editing.item.connected_systems}。重新选择后将以数据源 code 保存。</p>}
-        <p className="scenario-simple-note">场景状态、执行步骤、验收口径、数据映射等字段仍保留在存储中；本表不展示，避免把场景登记表做成流程编排器。</p>
+        <div className="form-grid two"><ResourcePicker label="主要对象ID" items={objects} value={form.related_objects} onChange={(value) => setForm({ ...form, related_objects: value })} /><ResourcePicker label="关键关系ID" items={links} value={form.related_links} onChange={(value) => setForm({ ...form, related_links: value })} detail={(item) => [item.source_display_name, item.target_display_name].filter(Boolean).join(" -> ")} /></div>
+        <div className="form-grid two"><ResourcePicker label="规则ID" items={rules} value={form.related_rules} onChange={(value) => setForm({ ...form, related_rules: value })} detail={(item) => item.description || ""} /><ResourcePicker label="行动ID" items={actions} value={form.related_actions} onChange={(value) => setForm({ ...form, related_actions: value })} detail={(item) => item.description || ""} /></div>
+        <ResourcePicker label="关联的公司系统" items={sources} value={form.source_codes} onChange={(value) => setForm({ ...form, source_codes: value })} codeKey="code" labelKey="name" detail={(item) => item.physical_object || item.category || ""} />{!form.source_codes.length && editing?.item?.connected_systems && <p className="scenario-simple-legacy">历史关联系统文本：{editing.item.connected_systems}。重新选择后将以数据源 code 保存。</p>}
+        <p className="scenario-simple-note">主要对象、关键关系、规则、行动、关联系统均是多选，因为对应存储字段都是列表；入口对象由主要对象第一项派生，不在表单中单独选择。场景状态、执行步骤、验收口径、数据映射等字段仍保留在存储中，本表不展示。</p>
       </form>
     </Modal>}
   </div>;

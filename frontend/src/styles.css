@@ -4017,3 +4017,34 @@ html, body, #root {
 .scenario-simple-multi option:checked { color:#1f5e85; background:#e7f4fb; }
 
 .scenario-simple-legacy { margin:-3px 0 0; color:#8d7a54; font-size:8.5px; line-height:1.5; }
+
+/* 业务场景：资源选择弹窗 */
+.scenario-picker-field { min-width:0; min-height:98px; padding:7px 8px; background:#fbfdfe; border:1px solid #d5e2ea; border-radius:4px; }
+.scenario-picker-head { display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.scenario-picker-head > span { display:inline-flex; align-items:center; gap:5px; color:#4e697d; font-size:9px; font-weight:600; }
+.scenario-picker-head > span em { padding:1px 5px; color:#6e8798; background:#edf3f7; border-radius:7px; font-size:8px; font-style:normal; font-weight:400; }
+.scenario-picker-head > button { min-height:23px; padding:0 6px; color:#2c6f98; background:#fff; border:1px solid #c7dfed; border-radius:3px; font-size:8px; cursor:pointer; }
+.scenario-picker-head > button:hover { background:#f2faff; }
+.scenario-picker-chips { display:flex; flex-wrap:wrap; gap:3px; max-height:76px; overflow:auto; margin-top:6px; }
+.scenario-picker-chips > span { display:inline-flex; align-items:center; gap:3px; max-width:100%; padding:2px 3px 2px 5px; color:#3f6781; background:#f0f8fc; border:1px solid #d2e6f0; border-radius:3px; font-size:8px; }
+.scenario-picker-chips > span > button { width:14px; height:14px; display:grid; place-items:center; padding:0; color:#84a0b1; background:transparent; border:0; font-size:12px; line-height:1; cursor:pointer; }
+.scenario-picker-chips > span > button:hover { color:#a34b53; }
+.scenario-picker-empty { margin:9px 0 0; color:#9ba8b1; font-size:8px; }
+.scenario-picker-modal-body { display:flex; flex-direction:column; gap:8px; min-height:300px; }
+.scenario-picker-search { height:34px; display:flex; align-items:center; gap:6px; padding:0 8px; color:#7890a0; background:#f8fbfd; border:1px solid #cfdde6; border-radius:4px; }
+.scenario-picker-search input { min-width:0; flex:1; border:0; outline:0; background:transparent; font-size:10px; }
+.scenario-picker-options { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:4px; max-height:430px; overflow:auto; padding:1px; }
+.scenario-picker-options > label { min-width:0; display:flex; align-items:flex-start; gap:6px; padding:7px 8px; background:#fff; border:1px solid #e3ebf0; border-radius:4px; cursor:pointer; }
+.scenario-picker-options > label:hover { background:#f7fbfd; border-color:#cfe2ed; }
+.scenario-picker-options > label.selected { background:#eff8fd; border-color:#bddceb; box-shadow:inset 2px 0 #2f7eae; }
+.scenario-picker-options > label input { flex:none; margin-top:2px; }
+.scenario-picker-options > label span { min-width:0; }
+.scenario-picker-options b, .scenario-picker-options code, .scenario-picker-options small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.scenario-picker-options b { color:#3c5e76; font-size:9px; }
+.scenario-picker-options code { margin-top:2px; color:#8b9da9; font-size:7.5px; }
+.scenario-picker-options small { margin-top:3px; color:#8c9ba5; font-size:8px; }
+.scenario-picker-no-result { grid-column:1 / -1; padding:40px 10px; color:#95a3ad; font-size:9px; text-align:center; }
+.scenario-picker-foot-count { margin-right:auto; color:#7d91a0; font-size:9px; }
+@media (max-width:700px) {
+  .scenario-picker-options { grid-template-columns:1fr; }
+}
