@@ -278,7 +278,7 @@ def _validate_business_scenario(ontology_id: str, payload: Dict[str, Any], allow
     steps = payload.get("steps") or []
     if allow_legacy_steps and steps and isinstance(steps[0], str):
         return
-    required = {"business_goal": "业务目标", "output_change": "输出/状态变化"}
+    required = {"business_goal": "业务目标"}
     missing = [label for key, label in required.items() if not payload.get(key)]
     if missing: raise repo.ValidationError(f"业务场景缺少：{'、'.join(missing)}")
     if not (payload.get("trigger_condition") or payload.get("trigger")):
@@ -317,6 +317,9 @@ def _validate_business_scenario(ontology_id: str, payload: Dict[str, Any], allow
     if not steps:
         conn.close()
         return
+    if not payload.get("output_change"):
+        conn.close()
+        raise repo.ValidationError("配置执行步骤前，请先填写输出/状态变化")
     if not isinstance(steps, list):
         conn.close()
         raise repo.ValidationError("执行步骤必须是列表")
