@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, KeyRound, Network, Pencil, Plus, Search, Star, Trash2, X } from 'lucide-react';
 import { api } from '../api';
 import { dataTypeLabel, designStatusLabel, statusLabel, STATUS_OPTIONS } from '../labels';
@@ -16,6 +16,8 @@ import { objectMappingState } from '../objectMapping';
 
 export default function ObjectTypes({ activeId, refreshOntologies, notify }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const focusedTypeId = searchParams.get('focus');
   const { requestResource, requestUpdate } = useModelingEntry();
   const [items, setItems] = useState(null);
   const [interfaces, setInterfaces] = useState([]);
@@ -46,6 +48,10 @@ export default function ObjectTypes({ activeId, refreshOntologies, notify }) {
     } catch (loadError) { setError(loadError.message); }
   };
   useEffect(() => { setItems(null); load(); }, [activeId]);
+  useEffect(() => {
+    const target = items?.find((item) => item.id === focusedTypeId);
+    if (target) { setSelected(target); openDetail(); }
+  }, [items, focusedTypeId]);
 
   const filtered = useMemo(() => (items || []).filter((item) => (
     (status === 'all' || item.status === status)

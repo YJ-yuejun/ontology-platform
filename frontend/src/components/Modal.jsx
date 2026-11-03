@@ -7,6 +7,8 @@ import { X } from 'lucide-react';
 //  3) 弹窗已经打开超过 300ms —— 否则「编辑」按钮位于弹窗右侧遮罩范围时，
 //     双击的第二下 mousedown 会在弹窗刚打开的瞬间把它关掉（曾被反馈为“闪退”）。
 const MIN_OPEN_MS_BEFORE_BACKDROP_CLOSE = 300;
+let openModalCount = 0;
+let bodyOverflowBeforeModal = '';
 
 export default function Modal({ title, subtitle, children, onClose, footer, wide = false, extraWide = false, closeOnBackdrop = true }) {
   const dialogRef = useRef(null);
@@ -16,11 +18,16 @@ export default function Modal({ title, subtitle, children, onClose, footer, wide
   const titleId = useId();
   closeRef.current = onClose;
   useEffect(() => {
+    if (openModalCount === 0) bodyOverflowBeforeModal = document.body.style.overflow;
+    openModalCount += 1;
+    document.body.style.overflow = 'hidden';
     const previousFocus = document.activeElement;
     const dialog = dialogRef.current;
     const firstField = dialog?.querySelector('[autofocus], input:not([disabled]), select:not([disabled]), textarea:not([disabled])');
     (firstField || dialog)?.focus();
     const onKeyDown = (event) => {
+      const dialogs = document.querySelectorAll('.modal[role="dialog"]');
+      if (dialogs[dialogs.length - 1] !== dialog) return;
       if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
       if (event.key !== 'Tab' || !dialog) return;
       const focusable = [...dialog.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
@@ -32,7 +39,12 @@ export default function Modal({ title, subtitle, children, onClose, footer, wide
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener('keydown', onKeyDown);
-    return () => { document.removeEventListener('keydown', onKeyDown); previousFocus?.focus?.(); };
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      openModalCount = Math.max(0, openModalCount - 1);
+      if (!openModalCount) document.body.style.overflow = bodyOverflowBeforeModal;
+      previousFocus?.focus?.();
+    };
   }, []);
   const onBackdropMouseDown = (event) => { backdropPressed.current = event.target === event.currentTarget; };
   const onBackdropClick = (event) => {

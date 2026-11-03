@@ -3,7 +3,7 @@ export const RESOURCE_KINDS = [
   { id: 'object_type', label: '对象类型', route: '/ontology/model/object-types', hint: '定义业务对象及其属性' },
   { id: 'link_type', label: '关系类型', route: '/ontology/model/link-types', hint: '关联已有对象，明确方向与基数', needsObjects: true },
   { id: 'business_rule', label: '规则', route: '/ontology/logic/definitions', hint: '描述输入、判断逻辑与输出' },
-  { id: 'action', label: '动作类型', route: '/ontology/model/actions', hint: '定义业务行动，不执行真实操作', needsObjects: true },
+  { id: 'action', label: '动作类型', route: '/ontology/model/actions', hint: '定义业务动作，不执行真实操作', needsObjects: true },
   { id: 'interface', label: '接口', route: '/ontology/model/interfaces', hint: '定义可复用的属性契约' },
 ];
 export const resourceKind = (id) => RESOURCE_KINDS.find((item) => item.id === id);

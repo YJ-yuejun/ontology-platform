@@ -10,7 +10,7 @@ import PaginationBar from '../components/PaginationBar';
 import useDetailPanel from '../hooks/useDetailPanel';
 
 const KINDS = {
-  capabilities: { label: '接口能力', singular: '接口能力', icon: Workflow, hint: '登记企业系统可调用的能力，以及与本体行动的对应关系' },
+  capabilities: { label: '接口能力', singular: '接口能力', icon: Workflow, hint: '登记企业系统可调用的能力，以及与本体动作的对应关系' },
   'action-mappings': { label: '动作执行映射', singular: '动作执行映射', icon: FileCode2, hint: '把本体动作绑定到已登记能力，配置参数、结果和失败处理' },
   'permission-policies': { label: '权限策略', singular: '权限策略', icon: ShieldCheck, hint: '统一约束对象可见性、数据修改和动作执行边界' },
 };
@@ -21,9 +21,9 @@ const idLabels = { capabilities: '接口ID', 'action-mappings': '映射ID', 'per
 const valueLabels = { draft: '工作状态', active: '已启用', deprecated: '已停用' };
 
 const templateFields = {
-  capabilities: [['target_object', '适用对象'], ['input', '输入'], ['output', '输出'], ['action_display', '对应行动'], ['target_system', '目标系统'], ['invoke_mode', '调用方式'], ['version', '版本'], ['owner', '负责人']],
-  'action-mappings': [['action_code', '行动ID'], ['target_system', '目标系统'], ['interface_name', '接口/能力'], ['invoke_mode', '调用方式'], ['input_parameters', '输入参数'], ['parameter_mapping', '参数映射'], ['result_mapping', '返回结果'], ['success_criteria', '成功判定'], ['error_policy', '失败处理'], ['writeback_object', '回写对象'], ['writeback_property', '回写属性'], ['audit_required', '审计'], ['owner', '负责人']],
-  'permission-policies': [['resource_type', '资源类型'], ['resource_ref', '对象/关系/行动'], ['role', '角色'], ['view', '查看'], ['modify', '修改'], ['execute', '执行'], ['data_scope', '数据范围'], ['approval_requirement', '审批要求'], ['audit_requirement', '审计要求'], ['permission_basis', '权限依据'], ['owner', '负责人']],
+  capabilities: [['target_object', '适用对象'], ['input', '输入'], ['output', '输出'], ['action_display', '对应动作'], ['target_system', '目标系统'], ['invoke_mode', '调用方式'], ['version', '版本'], ['owner', '负责人']],
+  'action-mappings': [['action_code', '动作ID'], ['target_system', '目标系统'], ['interface_name', '接口/能力'], ['invoke_mode', '调用方式'], ['input_parameters', '输入参数'], ['parameter_mapping', '参数映射'], ['result_mapping', '返回结果'], ['success_criteria', '成功判定'], ['error_policy', '失败处理'], ['writeback_object', '回写对象'], ['writeback_property', '回写属性'], ['audit_required', '审计'], ['owner', '负责人']],
+  'permission-policies': [['resource_type', '资源类型'], ['resource_ref', '对象/关系/动作'], ['role', '角色'], ['view', '查看'], ['modify', '修改'], ['execute', '执行'], ['data_scope', '数据范围'], ['approval_requirement', '审批要求'], ['audit_requirement', '审计要求'], ['permission_basis', '权限依据'], ['owner', '负责人']],
 };
 const asText = (value) => value == null ? '' : value === true ? '是' : value === false ? '否' : typeof value === 'string' ? value : Array.isArray(value) ? value.join('、') : typeof value === 'object' ? Object.entries(value).map(([key, item]) => `${key} → ${item}`).join('\n') : String(value);
 
@@ -33,16 +33,16 @@ function PayloadForm({ kind, payload, setPayload, actions, capabilities, objects
     ? <textarea required={required} value={asText(payload[key])} onChange={(event) => set(key, event.target.value)} />
     : <input required={required} value={asText(payload[key])} onChange={(event) => set(key, event.target.value)} />}</label>;
   if (kind === 'capabilities') return <div className="form-section"><h3>能力定义</h3><div className="form-grid two">
-    {field('target_object', '适用对象')}{field('action_display', '对应行动')}{field('target_system', '目标系统', true)}{field('invoke_mode', '调用方式', true)}{field('version', '版本')}{field('owner', '负责人')}
+    {field('target_object', '适用对象')}{field('action_display', '对应动作')}{field('target_system', '目标系统', true)}{field('invoke_mode', '调用方式', true)}{field('version', '版本')}{field('owner', '负责人')}
   </div>{field('input', '输入', false, true)}{field('output', '输出', false, true)}</div>;
-  if (kind === 'action-mappings') return <div className="form-section"><h3>行动与接口能力</h3><div className="form-grid two">
-    <label><span>行动ID</span><select required value={payload.action_code || ''} onChange={(event) => set('action_code', event.target.value)}><option value="">请选择行动</option>{payload.action_code && !actions.some((item) => (item.external_id || item.name) === payload.action_code) && <option value={payload.action_code}>{payload.action_code}（历史原值）</option>}{actions.map((item) => <option key={item.id} value={item.external_id || item.name}>{item.display_name} · {item.external_id || item.name}</option>)}</select></label>
+  if (kind === 'action-mappings') return <div className="form-section"><h3>动作与接口能力</h3><div className="form-grid two">
+    <label><span>动作ID</span><select required value={payload.action_code || ''} onChange={(event) => set('action_code', event.target.value)}><option value="">请选择动作</option>{payload.action_code && !actions.some((item) => (item.external_id || item.name) === payload.action_code) && <option value={payload.action_code}>{payload.action_code}（历史原值）</option>}{actions.map((item) => <option key={item.id} value={item.external_id || item.name}>{item.display_name} · {item.external_id || item.name}</option>)}</select></label>
     {field('target_system', '目标系统', true)}<label><span>接口/能力</span><select required value={payload.interface_name || ''} onChange={(event) => { const value = event.target.value; const match = capabilities.find((item) => item.name === value); setPayload({ ...payload, interface_name: value, capability_code: match?.code || '' }); }}><option value="">请选择已登记接口能力</option>{payload.interface_name && !capabilities.some((item) => item.name === payload.interface_name) && <option value={payload.interface_name}>{payload.interface_name}（模板原值）</option>}{capabilities.map((item) => <option key={item.id} value={item.name}>{item.name} · {item.code}</option>)}</select></label>{field('invoke_mode', '调用方式')}{field('input_parameters', '输入参数')}{field('success_criteria', '成功判定')}{field('error_policy', '失败处理')}{field('writeback_object', '回写对象')}{field('writeback_property', '回写属性')}{field('owner', '负责人')}
     <label><span>审计</span><select value={payload.audit_required === true || payload.audit_required === '是' ? '是' : payload.audit_required === false || payload.audit_required === '否' ? '否' : ''} onChange={(event) => set('audit_required', event.target.value)}><option value="">请选择</option><option>是</option><option>否</option></select></label>
   </div>{field('parameter_mapping', '参数映射', false, true)}{field('result_mapping', '返回结果', false, true)}</div>;
   const resourceNames = [...objects.map((item) => item.display_name), ...links.map((item) => item.display_name), ...actions.map((item) => item.display_name)];
   return <div className="form-section"><h3>授权定义</h3><div className="form-grid two">
-    {field('resource_type', '资源类型', true)}<label><span>对象/关系/行动</span><input required list="permission-resource-list" value={payload.resource_ref || ''} onChange={(event) => set('resource_ref', event.target.value)} /><datalist id="permission-resource-list">{resourceNames.map((name) => <option key={name} value={name} />)}</datalist></label>{field('role', '角色', true)}
+    {field('resource_type', '资源类型', true)}<label><span>对象/关系/动作</span><input required list="permission-resource-list" value={payload.resource_ref || ''} onChange={(event) => set('resource_ref', event.target.value)} /><datalist id="permission-resource-list">{resourceNames.map((name) => <option key={name} value={name} />)}</datalist></label>{field('role', '角色', true)}
     {['view', 'modify', 'execute'].map((key) => <label key={key}><span>{dictLabel[key]}</span><select value={asText(payload[key])} onChange={(event) => set(key, event.target.value)}><option value="">请选择</option><option>是</option><option>否</option><option>受限</option>{payload[key] && !['是', '否', '受限'].includes(payload[key]) && <option value={payload[key]}>{payload[key]}（历史原值）</option>}</select></label>)}
     {field('data_scope', '数据范围')}{field('approval_requirement', '审批要求')}{field('audit_requirement', '审计要求')}{field('permission_basis', '权限依据')}{field('owner', '负责人')}
   </div></div>;

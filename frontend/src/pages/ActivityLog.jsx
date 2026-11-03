@@ -41,7 +41,7 @@ const fieldNames = {
   title_property: '标题属性', subject_domain_id: '所属主题域 ID',
   business_domain_id: '所属业务域 ID', source_object_type_id: '起点对象 ID',
   target_object_type_id: '终点对象 ID', cardinality: '关系基数',
-  action_type: '行动类型', data_type: '数据类型', mapping_type: '映射类型',
+  action_type: '动作类型', data_type: '数据类型', mapping_type: '映射类型',
   owner: '负责人', properties: '属性', input_fields: '输入属性',
   output_description: '输出', trigger_mode: '触发方式',
 };

@@ -2,7 +2,7 @@ export const FORM_LABELS = { added: '新增', removed: '删除', modified: '修�
 export const SEVERITY_LABELS = { P0: 'P0 阻断', P1: 'P1 关注', P2: 'P2 提示' };
 export const DIMENSION_LABELS = { structural: '结构', semantic: '语义', permission: '权限' };
 export const RESOURCE_ORDER = ['对象类型', '对象属性', '关系', '业务规则', '业务行动'];
-export const RESOURCE_SHORT = { 对象类型: '对象', 对象属性: '属性', 关系: '关系', 业务规则: '规则', 业务行动: '行动' };
+export const RESOURCE_SHORT = { 对象类型: '对象', 对象属性: '属性', 关系: '关系', 业务规则: '规则', 业务行动: '动作' };
 
 export const FIELD_LABELS = {
   extend_params: '扩展参数',
@@ -18,7 +18,7 @@ export const FIELD_LABELS = {
   orl_expression: '规则表达式',
   orl_apply_obj: '适用对象',
   oact_tgt_obj: '作用对象',
-  oact_act_id: '行动标识',
+  oact_act_id: '动作标识',
   ont_name: '对象名称',
   ont_desc: '对象定义',
 };

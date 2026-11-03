@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Activity, ArrowLeft, BookOpen, Bot, Boxes, Building2, Check, ChevronDown, ChevronLeft, ChevronRight,
+  Activity, ArrowLeft, BookOpen, Bot, Boxes, Building2, Check, ChevronDown, ChevronLeft, ChevronRight, CircleAlert,
   ClipboardList, Database, FileText, GitBranch, Hammer, History, ListChecks, ListTree, Menu,
   Library, MessageSquareText, Network, Plus, Search, Settings, ShieldCheck, Sparkles, Layers3, TableProperties,
   Waypoints, Workflow, LogOut, MoreHorizontal, UserRound, Download,
@@ -22,7 +22,8 @@ import DictionaryManagement from './pages/DictionaryManagement';
 import FuturePage from './pages/FuturePage';
 import OntologyWorkspace from './pages/OntologyWorkspace';
 import BusinessRules from './pages/BusinessRules';
-import ObjectExplorer from './pages/ObjectExplorer';
+import InstanceData from './pages/InstanceData';
+import SystemTransfer, { readTransferPending } from './pages/SystemTransfer';
 import AIBuilder from './pages/AIBuilder';
 import EnterpriseResources from './pages/EnterpriseResources';
 import AgentRuntime from './pages/AgentRuntime';
@@ -47,7 +48,7 @@ const MAIN_NAV = [
   { label: '报告', icon: FileText, children: ['报告中心', '模板管理'] },
   { label: '工作流', icon: Workflow, children: ['发布管理', '流程编排', '流程日志'] },
   { label: '调度中心', icon: ClipboardList, children: ['作业调度', '执行日志'] },
-  { label: '系统', icon: Settings, children: ['表单模板', '用户与权限', '系统配置'] },
+  { label: '系统', icon: Settings, children: ['表单模板', '用户与权限', '系统配置', '系统数据导出', '系统数据导入'] },
 ];
 
 const ONTOLOGY_NAV = [
@@ -71,7 +72,7 @@ const ONTOLOGY_NAV = [
     { to: '/ontology/data/sources', label: '数据源', icon: Database },
     { to: '/ontology/data/mappings', label: '数据映射', icon: TableProperties },
     { to: '/ontology/data/mapping-graph', label: '映射图谱', icon: Network },
-    { to: '/ontology/data/instances', label: '对象探索', icon: Library },
+    { to: '/ontology/data/instances', label: '实例', icon: Library },
   ] },
   { id: 'logic', label: '运行能力', items: [
     { to: '/ontology/logic/execution', label: '系统能力与执行映射', icon: Workflow },
@@ -98,7 +99,7 @@ const TITLES = {
   '/ontology/model/dictionaries': ['字典管理', '维护全局共享的建模选项'],
   '/ontology/model/actions': ['动作类型', '定义对象允许执行的业务动作契约'],
   '/ontology/graph': ['本体图谱', '从全局查看并直接维护对象与关系组成的语义网络'],
-  '/ontology/data/instances': ['对象探索', '从对象类型出发，探索对象集并查看对象视图'],
+  '/ontology/data/instances': ['实例', '按对象类型查看、维护实例及关联数据'],
   '/ontology/data/sources': ['数据源', '登记业务系统与物理来源，采集表结构'],
   '/ontology/data/mappings': ['数据映射', '把物理字段直接映射到本体对象属性或关系'],
   '/ontology/data/mapping-graph': ['映射图谱', '从物理表到对象类型、再到表字段到对象属性的可探索映射网络'],
@@ -122,11 +123,11 @@ function PlatformSidebar({ collapsed, onToggle, onLogout }) {
     <div className="platform-sidebar-brand">
       {collapsed
         ? <button className="brand-logo collapsed" onClick={onToggle} title="展开平台导航"><Waypoints size={19} /></button>
-        : <><span className="brand-logo"><Waypoints size={19} /></span><span className="brand-copy"><b>本体技能开发</b><small>企业语义与行动层</small></span><button className="brand-collapse" onClick={onToggle} title="收起平台导航"><ChevronLeft size={16} /></button></>}
+        : <><span className="brand-logo"><Waypoints size={19} /></span><span className="brand-copy"><b>本体技能开发</b><small>企业语义与动作层</small></span><button className="brand-collapse" onClick={onToggle} title="收起平台导航"><ChevronLeft size={16} /></button></>}
     </div>
     <nav>{MAIN_NAV.map((item) => <div className="platform-main-group" key={item.label}>
       <button className={`platform-main-item ${(isChat ? item.label === '智能问答' : item.active) ? 'active' : ''}`} title={collapsed ? item.label : undefined} onClick={() => item.label === '智能问答' ? navigate('/chat') : item.label === '本体中心' ? navigate('/ontology/overview') : item.children && setExpanded((old) => ({ ...old, [item.label]: !old[item.label] }))}><item.icon size={17} /><span>{item.label}</span>{item.children && <ChevronDown size={14} className={expanded[item.label] ? 'open' : ''} />}</button>
-      {!collapsed && item.children && expanded[item.label] && <div className="platform-main-children">{item.children.map((child) => <button key={child}>{child}</button>)}</div>}
+      {!collapsed && item.children && expanded[item.label] && <div className="platform-main-children">{item.children.map((child) => <button key={child} onClick={() => child === '系统数据导出' ? navigate('/system/data-export') : child === '系统数据导入' ? navigate('/system/data-import') : undefined}>{child}</button>)}</div>}
     </div>)}</nav>
     <div className="platform-user-footer">
       <button className={`platform-user-card ${userOpen ? 'open' : ''}`} onClick={() => setUserOpen((value) => !value)} title="账号与退出">
@@ -151,13 +152,13 @@ function WorkspaceTabs() {
   return <div className="workspace-tabs"><NavLink to="/chat" className={`workspace-tab ${isChat ? 'active' : 'muted'}`}>智能问答</NavLink><div className="workspace-tab muted">知识库</div><NavLink to="/ontology/overview" className={`workspace-tab ${isChat ? 'muted' : 'active'}`}>本体中心</NavLink></div>;
 }
 
-function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher, onCreate, changeCount = 0 }) {
+function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher, onCreate, changeCount = 0, transferPendingCount = 0 }) {
   const location = useLocation();
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState({ workbench: true, model: true, data: true, logic: true, govern: true, agent: true });
   return <aside className="platform-ontology-sidebar">
     <div className="ontology-side-header">
-      {!collapsed && <div><h2>本体中心</h2><span>企业语义与行动层</span></div>}
+      {!collapsed && <div><h2>本体中心</h2><span>企业语义与动作层</span></div>}
       <div className="ontology-side-actions">{!collapsed && <button className="round-add" onClick={onCreate} title="新建本体"><Plus size={16} /></button>}<button className="ontology-collapse" onClick={onToggle}>{collapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}</button></div>
     </div>
     <div className="platform-ontology-picker">
@@ -174,7 +175,7 @@ function OntologySidebar({ collapsed, onToggle, activeId, active, onOpenSwitcher
           const isWorkbench = item.to === '/ontology/overview';
           const to = isWorkbench && activeId ? `/ontology/overview/${activeId}` : item.to;
           const unread = item.to === '/ontology/governance/activity' && changeCount > 0;
-          return <NavLink key={item.to} to={to} end title={collapsed ? item.label : unread ? `${item.label}：${changeCount} 条未读变更记录` : undefined} className={({ isActive }) => `ontology-tree-item ${item.child ? 'child' : ''} ${unread ? 'has-notice' : ''} ${(isActive || (isWorkbench && location.pathname.startsWith('/ontology/overview'))) ? 'active' : ''}`}><item.icon size={17} /><span>{item.label}</span>{unread && <em className="ontology-notice-badge" aria-label={`${changeCount} 条未读变更记录`}>{changeCount > 99 ? '99+' : changeCount}</em>}</NavLink>;
+          return <NavLink key={item.to} to={to} end title={collapsed ? item.label : unread ? `${item.label}：${changeCount} 条未读变更记录` : undefined} className={({ isActive }) => `ontology-tree-item ${item.child ? 'child' : ''} ${unread ? 'has-notice' : ''} ${item.to === '/ontology/data/sources' && transferPendingCount > 0 ? 'transfer-source-pending' : ''} ${(isActive || (isWorkbench && location.pathname.startsWith('/ontology/overview'))) ? 'active' : ''}`}><item.icon size={17} /><span>{item.label}{item.to === '/ontology/data/sources' && transferPendingCount > 0 && <em className="transfer-pending-badge" title="迁移演示：数据源待重新连接"> · {transferPendingCount}</em>}</span>{unread && <em className="ontology-notice-badge" aria-label={`${changeCount} 条未读变更记录`}>{changeCount > 99 ? '99+' : changeCount}</em>}</NavLink>;
         })}
       </section>;
     })}</nav>
@@ -225,6 +226,9 @@ export default function App() {
   const navigate = useNavigate();
   const isChat = location.pathname === '/chat';
   const isCompareWorkspace = location.pathname === '/ontology/governance/compare';
+  const isTransfer = location.pathname.startsWith('/system/data-');
+  const [transferPending, setTransferPending] = useState(readTransferPending);
+  useEffect(() => { const update = () => setTransferPending(readTransferPending()); window.addEventListener('ontology-transfer-pending', update); return () => window.removeEventListener('ontology-transfer-pending', update); }, []);
   const initialCompact = () => typeof window !== 'undefined' && window.innerWidth < 1500;
   const [mainCollapsed, setMainCollapsed] = useState(initialCompact);
   const [ontologyCollapsed, setOntologyCollapsed] = useState(initialCompact);
@@ -325,11 +329,13 @@ export default function App() {
   return <AssistantProvider activeId={activeId} active={active} notify={setMessage}><ModelingEntryContext.Provider value={entries}><div className={`platform-shell ${isChat ? 'chat-workspace' : ''} ${mainCollapsed ? 'main-collapsed' : ''} ${ontologyCollapsed ? 'ontology-collapsed' : ''}`}>
     <PlatformSidebar collapsed={mainCollapsed} onToggle={() => setMainCollapsed((value) => !value)} onLogout={() => setMessage('原型演示环境，暂不执行真实退出；账号入口已移到左下角。')} />
     <div className="workspace-area"><WorkspaceTabs /><div className="workspace-body">
-      {!isChat && !isCompareWorkspace && <OntologySidebar collapsed={ontologyCollapsed} onToggle={() => setOntologyCollapsed((value) => !value)} activeId={activeId} active={active} onOpenSwitcher={() => setSwitchOpen(true)} onCreate={() => setCreateOpen(true)} changeCount={changeCount} />}
-      <main className="page-stage" aria-label={`${title[0]}：${title[1]}`}>
+      {!isChat && !isCompareWorkspace && !isTransfer && <OntologySidebar collapsed={ontologyCollapsed} onToggle={() => setOntologyCollapsed((value) => !value)} activeId={activeId} active={active} onOpenSwitcher={() => setSwitchOpen(true)} onCreate={() => setCreateOpen(true)} changeCount={changeCount} transferPendingCount={transferPending.length} />}
+      <main className="page-stage" style={isTransfer ? { marginLeft: 0 } : undefined} aria-label={`${title[0]}：${title[1]}`}>
         {!isChat && !location.pathname.startsWith('/ontology/overview') && new URLSearchParams(location.search).get('guide') === '1' && <section className="modeling-next-step"><span>手动建模</span><div><b>{title[0]}</b><p>按表单保存后，返回工作台继续下一步；未保存的内容不会自动提交。</p></div><button className="bc-button" onClick={() => navigate(`/ontology/overview/${activeId}?guide=1`)}>返回工作台，继续下一步 <ChevronRight size={14} /></button></section>}
         {!isChat && new URLSearchParams(location.search).get('from_history') === '1' && <section className="history-return-bar"><span><History size={15} /> 正在查看变更记录关联的资源</span><button type="button" onClick={() => navigate(historyReturnUrl(location.search))}><ArrowLeft size={14} /> 返回这条变更记录</button></section>}
-        <div className="studio-content">{!activeId && ontologies.length === 0 && !isChat && !location.pathname.startsWith('/ontology/build') ? <div className="welcome-empty"><Waypoints size={44} /><h2>从第一个本体开始</h2><p>创建业务语义空间，再定义对象、关系和业务动作。</p><button className="btn primary" onClick={() => setCreateOpen(true)}><Plus size={17} /> 新建本体</button></div> : <Routes>
+        <div className="studio-content">{location.pathname === '/ontology/data/sources' && transferPending.length > 0 && <div className="transfer-pending"><CircleAlert size={17}/><span>迁移演示：{transferPending.map(item => item.name).join('、')} 需检查凭据并重新校验连接；演示未导入真实数据源。</span><button onClick={() => { sessionStorage.removeItem('ontology-transfer-demo-pending'); setTransferPending([]); }}>关闭提示</button></div>}{!activeId && ontologies.length === 0 && !isChat && !isTransfer && !location.pathname.startsWith('/ontology/build') ? <div className="welcome-empty"><Waypoints size={44} /><h2>从第一个本体开始</h2><p>创建业务语义空间，再定义对象、关系和业务动作。</p><button className="btn primary" onClick={() => setCreateOpen(true)}><Plus size={17} /> 新建本体</button></div> : <Routes>
+          <Route path="/system/data-export" element={<SystemTransfer mode="export" ontologies={ontologies} />} />
+          <Route path="/system/data-import" element={<SystemTransfer mode="import" ontologies={ontologies} onNavigateSources={() => navigate('/ontology/data/sources')} />} />
           <Route path="/chat" element={<BuildChat {...pageProps} ontologies={ontologies} onCreate={() => setCreateOpen(true)} />} />
           <Route path="/ontology/all" element={<Navigate to="/ontology/overview" replace />} />
           <Route path="/ontology/ai" element={<AssistantPage />} />
@@ -347,7 +353,7 @@ export default function App() {
           <Route path="/ontology/model/business-rules" element={<BusinessRules {...pageProps} />} />
           <Route path="/ontology/model/interfaces" element={<Interfaces {...pageProps} />} />
           <Route path="/ontology/graph" element={<GraphPage {...pageProps} />} />
-          <Route path="/ontology/data/instances" element={<ObjectExplorer {...pageProps} />} />
+          <Route path="/ontology/data/instances" element={<InstanceData key={activeId} {...pageProps} />} />
           <Route path="/ontology/data/sources" element={<DataMappingStudio mode="sources" {...pageProps} />} />
           <Route path="/ontology/data/mappings" element={<DataMappingStudio mode="mappings" {...pageProps} />} />
           <Route path="/ontology/data/mapping-graph" element={<DataMappingStudio mode="graph" {...pageProps} />} />

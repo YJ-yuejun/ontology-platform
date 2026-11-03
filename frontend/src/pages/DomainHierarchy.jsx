@@ -137,7 +137,7 @@ export default function DomainHierarchy({ activeId, refreshOntologies, notify })
     const effect = kind === 'domain'
       ? `将同时删除其下 ${domainSubjects.length} 个主题域分类，并让 ${affectedObjects} 个对象类型变为“未分类”`
       : `将让 ${affectedObjects} 个对象类型变为“未分类”`;
-    if (!window.confirm(`确定删除${kind === 'domain' ? '业务域' : '主题域'}“${item.name}”吗？\n\n${effect}。对象类型及其属性、关系、规则和行动不会被删除，之后仍可重新绑定其他主题域。历史版本和变更日志仍然保留。`)) return;
+    if (!window.confirm(`确定删除${kind === 'domain' ? '业务域' : '主题域'}“${item.name}”吗？\n\n${effect}。对象类型及其属性、关系、规则和动作不会被删除，之后仍可重新绑定其他主题域。历史版本和变更日志仍然保留。`)) return;
     try {
       await api(`/api/${kind === 'domain' ? 'business-domains' : 'subject-domains'}/${item.id}`, { method: 'DELETE' });
       await load(kind === 'domain' ? undefined : selectedDomainId); refreshOntologies(activeId);
@@ -165,8 +165,8 @@ export default function DomainHierarchy({ activeId, refreshOntologies, notify })
         {selectedSubject ? <div className="subject-inspector-body"><div className="subject-title"><i><Layers3 size={18} /></i><div><h3>{selectedSubject.name}</h3><code>{selectedSubject.code}</code></div></div><p>{selectedSubject.description || '尚未填写主题域说明。'}</p>
           <dl><div><dt>所属业务域</dt><dd>{selectedDomain?.name || '—'}</dd></div><div><dt>负责人</dt><dd>{selectedSubject.owner || '未设置'}</dd></div><div><dt>使用状态</dt><dd><em className={`oma-status ${selectedSubject.status}`}>{usageStatusLabel(selectedSubject.status)}</em></dd></div><div><dt>对象类型</dt><dd>{subjectObjects.length} 个</dd></div><div><dt>最近修改</dt><dd>{formatTime(selectedSubject.updated_at)}</dd></div></dl>
           <section className="subject-detail-section"><header><strong>下属对象类型</strong><span>{subjectObjects.length}</span></header>{subjectObjects.length ? <div>{subjectObjects.map((object) => <button key={object.id} onClick={() => navigate('/ontology/model/object-types')}><i><ObjectTypeIcon value={object.icon} size={13} /></i><span><b>{object.display_name}</b><code>{object.name}</code></span><em>{object.properties.length} 项属性</em><ChevronRight size={13} /></button>)}</div> : <p>尚未归类对象。</p>}</section>
-          <section className="subject-impact"><header><strong>引用影响</strong><button onClick={() => navigate(`/ontology/graph?domain=${selectedDomainId}&subject=${selectedSubjectId}`)}>在本体图谱中查看 <ChevronRight size={13} /></button></header><div>{[['下属对象', subjectImpact.objects], ['涉及关系', subjectImpact.links], ['跨主题关系', subjectImpact.crossLinks], ['关联规则', subjectImpact.rules], ['关联行动', subjectImpact.actions], ['关联场景', subjectImpact.scenarios]].map(([label, value]) => <span key={label}><b>{value}</b><small>{label}</small></span>)}</div></section>
-          {selectedSubject.object_count > 0 && <p className="delete-constraint-note">删除该主题域只会移除分类关联，并让 {selectedSubject.object_count} 个对象类型变为“未分类”；不会删除对象、属性、关系、规则或行动。</p>}
+          <section className="subject-impact"><header><strong>引用影响</strong><button onClick={() => navigate(`/ontology/graph?domain=${selectedDomainId}&subject=${selectedSubjectId}`)}>在本体图谱中查看 <ChevronRight size={13} /></button></header><div>{[['下属对象', subjectImpact.objects], ['涉及关系', subjectImpact.links], ['跨主题关系', subjectImpact.crossLinks], ['关联规则', subjectImpact.rules], ['关联动作', subjectImpact.actions], ['关联场景', subjectImpact.scenarios]].map(([label, value]) => <span key={label}><b>{value}</b><small>{label}</small></span>)}</div></section>
+          {selectedSubject.object_count > 0 && <p className="delete-constraint-note">删除该主题域只会移除分类关联，并让 {selectedSubject.object_count} 个对象类型变为“未分类”；不会删除对象、属性、关系、规则或动作。</p>}
         </div> : <EmptyState title="请选择主题域" description="从中间列表选择主题域查看对象和依赖详情。" />}
       </aside>
     </div>

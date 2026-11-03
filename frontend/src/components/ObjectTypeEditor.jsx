@@ -197,8 +197,8 @@ export default function ObjectTypeEditor({ activeId, editing, initial, notify, o
       </section>
 
       <details className="form-section object-advanced"><summary><Layers3 size={15} /> 实现接口（可选）</summary>
-        <fieldset className="compact-check-field"><legend><Layers3 size={15} /> 实现接口（可选）</legend><p>接口只声明可复用的结构契约；外部系统调用在“系统能力与行动执行映射”管理。</p><div className="compact-check-list">{interfaces.map((entry) => <label key={entry.id}><input type="checkbox" checked={form.interface_ids.includes(entry.id)} onChange={() => toggleInterface(entry)} /><span><b>{entry.display_name}</b><code>{entry.name}</code><small>{entry.properties.length} 项属性契约</small></span></label>)}{!interfaces.length && <em>当前本体尚未定义接口，可先到“接口”页新建。</em>}</div></fieldset>
-        <p className="template-field-note">保存只进入当前工作状态；映射需在“数据映射 → 语义映射”另行配置，对象保存不会导入实例，也不会自动创建业务行动。</p>
+        <fieldset className="compact-check-field"><legend><Layers3 size={15} /> 实现接口（可选）</legend><p>接口只声明可复用的结构契约；外部系统调用在“系统能力与动作执行映射”管理。</p><div className="compact-check-list">{interfaces.map((entry) => <label key={entry.id}><input type="checkbox" checked={form.interface_ids.includes(entry.id)} onChange={() => toggleInterface(entry)} /><span><b>{entry.display_name}</b><code>{entry.name}</code><small>{entry.properties.length} 项属性契约</small></span></label>)}{!interfaces.length && <em>当前本体尚未定义接口，可先到“接口”页新建。</em>}</div></fieldset>
+        <p className="template-field-note">保存只进入当前工作状态；映射需在“数据映射 → 语义映射”另行配置，对象保存不会导入实例，也不会自动创建业务动作。</p>
       </details>
 
       {editing && <details className="object-template-source"><summary>模板来源（只读）</summary>
@@ -209,7 +209,7 @@ export default function ObjectTypeEditor({ activeId, editing, initial, notify, o
           <div><dt>模板业务域原值</dt><dd>{form.domain || '未填写'}</dd></div>
           <div><dt>模板来源系统</dt><dd>{form.source_system || '未填写'}</dd></div>
           <div><dt>生命周期</dt><dd>{form.lifecycle || '未填写'}</dd></div>
-          <div><dt>事件 / 需行动</dt><dd>{[form.is_event && '事件对象', form.requires_action && '需要行动'].filter(Boolean).join('、') || '无'}</dd></div>
+          <div><dt>事件 / 需动作</dt><dd>{[form.is_event && '事件对象', form.requires_action && '需要动作'].filter(Boolean).join('、') || '无'}</dd></div>
           <div><dt>数据负责人</dt><dd>{form.owner || '未填写'}</dd></div>
           <div><dt>模板建模状态</dt><dd>{designStatusLabel(form.design_status)}</dd></div>
         </dl>

@@ -422,8 +422,8 @@ def update_object_instance(component_id: str, data: ObjectInstanceBase):
 
 
 @app.delete("/api/instances/{component_id}", status_code=204)
-def delete_object_instance(component_id: str):
-    repo.delete_object_instance(component_id)
+def delete_object_instance(component_id: str, expected_updated_at: Optional[str] = None):
+    repo.delete_object_instance(component_id, expected_updated_at)
 
 
 @app.get("/api/ontologies/{ontology_id}/instance-links")
@@ -439,6 +439,11 @@ def create_link_instance(ontology_id: str, data: LinkInstanceBase):
 @app.delete("/api/instance-links/{component_id}", status_code=204)
 def delete_link_instance(component_id: str):
     repo.delete_link_instance(component_id)
+
+
+@app.put("/api/instance-links/{component_id}")
+def update_link_instance(component_id: str, data: LinkInstanceBase):
+    return repo.update_link_instance(component_id, data)
 
 
 @app.get("/api/ontologies/{ontology_id}/graph")

@@ -124,11 +124,15 @@ class ActionBase(BaseModel):
     result_schema: Dict[str, Any] = Field(default_factory=dict)
     side_effects: List[str] = Field(default_factory=list)
     approval_required: bool = False
+    approval_status: Optional[Literal["pending", "required", "not_required"]] = None
     owner: Optional[str] = None
     design_status: str = "draft"
     # 模板原文与内部结构化执行契约并存；页面按 09_行动 的字段呈现。
     target_role: Optional[str] = None
     input_parameters_text: Optional[str] = None
+    trigger_rule_codes: Optional[List[str]] = None
+    business_definition: Optional[Dict[str, Any]] = None
+    trigger_rules: Optional[List[str]] = None
     precondition_text: Optional[str] = None
     result_text: Optional[str] = None
     side_effects_text: Optional[str] = None
@@ -219,6 +223,7 @@ class ObjectInstanceBase(BaseModel):
     source_summary: Optional[str] = None
     template_sheet: Optional[str] = None
     template_row: Optional[int] = None
+    expected_updated_at: Optional[str] = None
 
 
 class LinkInstanceBase(BaseModel):
@@ -226,6 +231,7 @@ class LinkInstanceBase(BaseModel):
     source_instance_id: str
     target_instance_id: str
     properties: Dict[str, Any] = Field(default_factory=dict)
+    expected_updated_at: Optional[str] = None
 
 
 class EnterpriseResourceBase(BaseModel):

@@ -5,7 +5,7 @@ import { api } from '../api';
 
 const TITLES = {
   data_type: '数据类型', system_type: '系统类型', data_category: '数据类别',
-  interface_type: '接口方式', mapping_way: '映射方式', action_type: '行动类型', xform_rule: '转换规则',
+  interface_type: '接口方式', mapping_way: '映射方式', action_type: '动作类型', xform_rule: '转换规则',
 };
 const EXTRA = { data_type: [['default', '默认值'], ['sys_dt', '系统代码']], system_type: [['contact', '联络人']] };
 const BEHAVIOR_KINDS = new Set(['data_type', 'interface_type', 'mapping_way', 'action_type', 'xform_rule']);

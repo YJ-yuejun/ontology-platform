@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import functools
 import json
+import math
 import os
 import re
 import sqlite3
@@ -875,6 +876,7 @@ def _validate_restored_action_mappings(oid):
     conn = get_conn()
     for item in actions:
         _validate_action_mapping(conn, oid, ActionBase(**item), item["id"])
+        _validate_action_rules(conn, oid, item.get("trigger_rule_codes"))
     conn.close()
 
 
@@ -889,6 +891,33 @@ def _validate_action_mapping(conn, oid, data, component_id=None):
             raise ValidationError("执行映射不存在或不属于当前动作")
 
 
+def _validate_action_rules(conn, oid, codes):
+    if codes is None:
+        return
+    if any(not isinstance(code, str) or not code.strip() for code in codes) or len(codes) != len(set(codes)):
+        raise ValidationError("触发规则编号不能为空或重复")
+    for code in codes:
+        if not conn.execute("SELECT 1 FROM enterprise_logic_definitions WHERE ontology_id=? AND code=? AND COALESCE(category, '') NOT IN ('函数', 'function')", (oid, code)).fetchone():
+            raise ValidationError(f"触发规则 {code} 不属于当前本体")
+
+
+def _action_rule_names(conn, oid, codes):
+    """Resolve the display snapshot from the governed rule resources.
+
+    Rule codes are the stable relation. Names are copied only as a readable
+    snapshot so renaming a rule does not break the action reference.
+    """
+    if codes is None:
+        return None
+    rows = conn.execute("SELECT code,name FROM enterprise_logic_definitions WHERE ontology_id=? AND code=?", (oid, codes[0])).fetchall() if codes else []
+    by_code = {row["code"]: row["name"] for row in rows}
+    if len(codes) > 1:
+        placeholders = ','.join('?' for _ in codes)
+        rows = conn.execute(f"SELECT code,name FROM enterprise_logic_definitions WHERE ontology_id=? AND code IN ({placeholders})", (oid, *codes)).fetchall()
+        by_code = {row["code"]: row["name"] for row in rows}
+    return [by_code[code] for code in codes if code in by_code]
+
+
 @_no_leak
 def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None, *, defer_mapping_validation: bool=False) -> Dict[str, Any]:
     from action_definitions import merge_config, validate_definition
@@ -899,6 +928,7 @@ def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None, *,
     if component_id and not current:
         raise NotFoundError("Action 不存在")
     previous = _row_action(current) if current else None
+    supplied = data.model_dump(exclude_unset=True)
     if previous:
         if previous["ontology_id"] != oid:
             raise ValidationError("Action 不属于当前本体")
@@ -911,6 +941,43 @@ def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None, *,
             if supplied["definition_config"] is not None:
                 supplied["definition_config"] = merge_config(previous.get("definition_config"), supplied["definition_config"])
         data = ActionBase(**{**previous, **supplied})
+    # Explicit approval decisions update the existing runtime flag. Pending is
+    # deliberately separate and preserves any prior flag until confirmed.
+    if supplied.get("approval_status") in {"required", "not_required"}:
+        data.approval_required = data.approval_status == "required"
+    elif "approval_status" not in supplied and "approval_required" in supplied:
+        data.approval_status = "required" if data.approval_required else "not_required"
+    if data.business_definition is not None:
+        definition = data.business_definition
+        if definition.get("version") != 2:
+            raise ValidationError("业务定义版本无效")
+        for key in ("operation", "outcome"):
+            value = definition.get(key)
+            if not isinstance(value, str) or len(value) > 10000:
+                raise ValidationError("操作说明和预期结果须为 10000 字以内的文本")
+        for key in ("information", "prerequisites"):
+            values = definition.get(key)
+            if not isinstance(values, list) or len(values) > 100 or any(not isinstance(v, str) or not v.strip() or len(v) > 500 for v in values):
+                raise ValidationError("所需信息和执行前提须为非空文本列表，每项最多 500 字")
+        if data.design_status not in {"draft", "validated"}:
+            raise ValidationError("业务定义状态无效")
+        if data.design_status == "validated" and not definition["operation"].strip():
+            raise ValidationError("请补充操作说明后再确认业务定义")
+    # Action IDs are allocated by the server for every new action. The UI may
+    # show a preview, but a client supplied ID is never needed to create one.
+    # Keeping allocation inside the transaction prevents duplicate IDs when two
+    # users create actions at the same time.
+    if not current and not data.external_id:
+        existing = conn.execute("SELECT name,metadata FROM actions WHERE ontology_id=?", (oid,)).fetchall()
+        codes = {json.loads(row["metadata"] or "{}").get("external_id") for row in existing}
+        names = {row["name"] for row in existing}
+        number = 1
+        while f"ACT-{number:03d}" in codes or f"action_act_{number:03d}" in names:
+            number += 1
+        data.external_id = f"ACT-{number:03d}"
+        # A client supplied placeholder name must not win a race with another
+        # creator; derive the internal API name from the allocated ID here too.
+        data.name = f"action_act_{number:03d}"
     # Normalize identity strings without rewriting source evidence or multiline text.
     for key in ("name", "display_name", "external_id", "action_category", "owner"):
         value = getattr(data, key)
@@ -932,6 +999,12 @@ def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None, *,
             data.action_category = matches[0]["dat_code"]
         elif data.definition_config is not None and (not previous or previous.get("action_category") != data.action_category):
             raise ValidationError("请选择有效的行动类型字典项")
+    if data.trigger_rules is not None and any(not rule.strip() or len(rule) > 500 for rule in data.trigger_rules):
+        raise ValidationError("触发规则不能为空且每条最多 500 个字符")
+    if not defer_mapping_validation:
+        _validate_action_rules(conn, oid, data.trigger_rule_codes)
+        if data.trigger_rule_codes is not None:
+            data.trigger_rules = _action_rule_names(conn, oid, data.trigger_rule_codes)
     if not defer_mapping_validation:
         _validate_action_mapping(conn, oid, data, component_id)
     try:
@@ -946,8 +1019,8 @@ def save_action(oid: str, data: ActionBase, component_id: Optional[str]=None, *,
             if value and str(other.get(key) or "").strip() == value:
                 raise ConflictError(f"同一本体中{title}已存在")
     fields = ("external_id", "action_category", "execution_logic", "object_effect", "result_schema", "side_effects",
-              "approval_required", "owner", "design_status", "precondition_mode", "target_role", "input_parameters_text",
-              "precondition_text", "result_text", "side_effects_text", "definition_config", "definition_version")
+              "approval_required", "approval_status", "owner", "design_status", "precondition_mode", "target_role", "input_parameters_text",
+              "precondition_text", "result_text", "side_effects_text", "definition_config", "definition_version", "trigger_rule_codes", "trigger_rules", "business_definition")
     metadata = json.loads(current["metadata"] or "{}") if current else {}
     metadata.update({key: getattr(data, key) for key in fields if getattr(data, key) is not None or key in data.model_fields_set})
     timestamp = now()
@@ -1413,7 +1486,7 @@ def get_object_instance(component_id: str) -> Dict[str, Any]:
         FROM object_instances i JOIN object_types o ON o.id=i.object_type_id WHERE i.id=?""",(component_id,)).fetchone()
     if not row: conn.close(); raise NotFoundError("对象实例不存在")
     data=_row_instance(row)
-    related=conn.execute("""SELECT li.id,li.link_type_id,lt.display_name link_display_name,lt.name link_name,
+    related=conn.execute("""SELECT li.id,li.link_type_id,li.properties,li.updated_at,lt.display_name link_display_name,lt.name link_name,
         CASE WHEN li.source_instance_id=? THEN 'outgoing' ELSE 'incoming' END direction,
         other.id related_instance_id,other.title related_title,other.business_key related_business_key,
         ot.display_name related_object_type,ot.icon related_object_icon
@@ -1421,7 +1494,7 @@ def get_object_instance(component_id: str) -> Dict[str, Any]:
         JOIN object_instances other ON other.id=CASE WHEN li.source_instance_id=? THEN li.target_instance_id ELSE li.source_instance_id END
         JOIN object_types ot ON ot.id=other.object_type_id
         WHERE li.source_instance_id=? OR li.target_instance_id=? ORDER BY lt.display_name,other.title""",(component_id,component_id,component_id,component_id)).fetchall()
-    conn.close(); data["related"]=[dict(item) for item in related]; return data
+    conn.close(); data["related"]=[{**dict(item), "properties":json.loads(item["properties"] or "{}")} for item in related]; return data
 
 
 def _validate_instance_properties(obj: Dict[str, Any], properties: Dict[str, Any]) -> None:
@@ -1430,6 +1503,26 @@ def _validate_instance_properties(obj: Dict[str, Any], properties: Dict[str, Any
     if unknown: raise ValidationError(f"实例包含未定义属性：{', '.join(sorted(unknown))}")
     missing=[item["name"] for item in definitions.values() if item.get("is_required") and properties.get(item["key"]) in (None,"")]
     if missing: raise ValidationError(f"实例缺少必填属性：{'、'.join(missing)}")
+    for key, value in properties.items():
+        if value is None or value == "":
+            continue
+        definition = definitions[key]
+        kind, label = definition.get("type", "string"), definition.get("name", key)
+        if kind == "integer" and (type(value) is not int or abs(value) > 9007199254740991):
+            raise ValidationError(f"{label}必须为安全范围内的整数")
+        if kind == "decimal" and (type(value) not in (int, float) or not math.isfinite(value)):
+            raise ValidationError(f"{label}必须为有效数值")
+        if kind == "boolean" and type(value) is not bool:
+            raise ValidationError(f"{label}必须为布尔值")
+        if kind in {"string", "enum", "datetime"} and not isinstance(value, str):
+            raise ValidationError(f"{label}必须为文本")
+        if kind == "enum" and definition.get("options") and value not in definition["options"]:
+            raise ValidationError(f"{label}不在枚举选项中")
+        if kind == "datetime":
+            try:
+                datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                raise ValidationError(f"{label}不是有效日期或日期时间")
 
 
 @_no_leak
@@ -1438,16 +1531,34 @@ def save_object_instance(oid: str, data: ObjectInstanceBase, component_id: Optio
     obj=get_object_type(data.object_type_id)
     if obj["object_kind"] == "abstract_type": raise ValidationError("抽象类型不能直接创建实例")
     _validate_instance_properties(obj,data.properties)
-    conn=get_conn(); conflict=conn.execute("SELECT 1 FROM object_instances WHERE ontology_id=? AND object_type_id=? AND business_key=? AND id<>?",(oid,data.object_type_id,data.business_key,component_id or "")).fetchone()
+    if not data.business_key.strip() or not data.title.strip(): raise ValidationError("业务主键和实例标题不能为空")
+    conn=get_conn(); conn.execute("BEGIN IMMEDIATE")
+    current = conn.execute("SELECT * FROM object_instances WHERE id=? AND ontology_id=?", (component_id,oid)).fetchone() if component_id else None
+    if component_id and not current: raise NotFoundError("对象实例不存在")
+    if current and data.expected_updated_at and current["updated_at"] != data.expected_updated_at:
+        raise ConflictError("实例已被其他操作更新。请刷新后查看最新数据，再合并本次修改。")
+    if current and (current["object_type_id"] != data.object_type_id or current["business_key"] != data.business_key):
+        raise ValidationError("实例类型和主键在创建后不可通过普通编辑修改")
+    for definition in obj.get("effective_properties", obj["properties"]):
+        key = definition["key"]
+        value = data.properties.get(key)
+        if definition.get("is_primary_key") and value not in (None, "") and str(value) != data.business_key:
+            raise ValidationError(f"主键属性{definition['name']}必须与业务主键一致")
+        if definition.get("is_unique") and value not in (None, ""):
+            duplicate = conn.execute("SELECT properties FROM object_instances WHERE ontology_id=? AND object_type_id=? AND id<>?", (oid,data.object_type_id,component_id or "")).fetchall()
+            if any(json.loads(row["properties"]).get(key) == value for row in duplicate):
+                raise ConflictError(f"属性{definition['name']}的值已存在，必须唯一")
+    conflict=conn.execute("SELECT 1 FROM object_instances WHERE ontology_id=? AND object_type_id=? AND business_key=? AND id<>?",(oid,data.object_type_id,data.business_key,component_id or "")).fetchone()
     if conflict: conn.close(); raise ConflictError("该对象类型下的业务主键已存在")
     timestamp=now()
+    last_synced = data.last_synced_at if data.last_synced_at is not None else (current["last_synced_at"] if current else timestamp if data.sync_status == "synced" else None)
     if component_id:
         current=conn.execute("SELECT 1 FROM object_instances WHERE id=? AND ontology_id=?",(component_id,oid)).fetchone()
         if not current: conn.close(); raise NotFoundError("对象实例不存在")
         conn.execute("""UPDATE object_instances SET object_type_id=?,business_key=?,title=?,properties=?,record_status=?,
             sync_status=?,source_system=?,source_pk=?,last_synced_at=?,sync_error=?,quality_status=?,metadata=?,updated_at=?,updated_by=? WHERE id=?""",
             (data.object_type_id,data.business_key,data.title,_json(data.properties),data.record_status,
-             data.sync_status,data.source_system,data.source_pk or data.business_key,data.last_synced_at or timestamp,data.sync_error,data.quality_status,
+             data.sync_status,data.source_system,data.source_pk or data.business_key,last_synced,data.sync_error,data.quality_status,
              _json({"external_id": data.external_id, "source_summary": data.source_summary, "template_sheet": data.template_sheet, "template_row": data.template_row}),timestamp,"manual-admin",component_id)); op="update"
     else:
         component_id=str(uuid.uuid4())
@@ -1456,13 +1567,19 @@ def save_object_instance(oid: str, data: ObjectInstanceBase, component_id: Optio
              sync_status,source_system,source_pk,last_synced_at,sync_error,quality_status,metadata,created_by,updated_by)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (component_id,oid,data.object_type_id,data.business_key,data.title,_json(data.properties),data.record_status,timestamp,timestamp,
-             data.sync_status,data.source_system,data.source_pk or data.business_key,data.last_synced_at or timestamp,data.sync_error,data.quality_status,
+             data.sync_status,data.source_system,data.source_pk or data.business_key,last_synced,data.sync_error,data.quality_status,
              _json({"external_id": data.external_id, "source_summary": data.source_summary, "template_sheet": data.template_sheet, "template_row": data.template_row}),"manual-admin","manual-admin")); op="create"
     _log(conn,oid,"object_instance",component_id,op,f"{'更新' if op=='update' else '创建'}实例 {data.title}"); conn.commit(); conn.close(); return get_object_instance(component_id)
 
 
-def delete_object_instance(component_id: str) -> None:
-    current=get_object_instance(component_id); conn=get_conn(); conn.execute("DELETE FROM object_instances WHERE id=?",(component_id,)); _log(conn,current["ontology_id"],"object_instance",component_id,"delete",f"删除实例 {current['title']}"); conn.commit(); conn.close()
+@_no_leak
+def delete_object_instance(component_id: str, expected_updated_at: Optional[str] = None) -> None:
+    conn=get_conn(); conn.execute("BEGIN IMMEDIATE")
+    current=conn.execute("SELECT * FROM object_instances WHERE id=?",(component_id,)).fetchone()
+    if not current: raise NotFoundError("对象实例不存在")
+    if expected_updated_at and current["updated_at"] != expected_updated_at:
+        raise ConflictError("实例已被更新，请重新查看最新数据后再删除")
+    conn.execute("DELETE FROM object_instances WHERE id=?",(component_id,)); _log(conn,current["ontology_id"],"object_instance",component_id,"delete",f"删除实例 {current['title']}"); conn.commit(); conn.close()
 
 
 def list_link_instances(oid: str) -> list[Dict[str, Any]]:
@@ -1475,7 +1592,7 @@ def list_link_instances(oid: str) -> list[Dict[str, Any]]:
 
 @_no_leak
 def save_link_instance(oid: str, data: LinkInstanceBase) -> Dict[str, Any]:
-    get_ontology(oid); conn=get_conn()
+    get_ontology(oid); conn=get_conn(); conn.execute("BEGIN IMMEDIATE")
     link=conn.execute("SELECT * FROM link_types WHERE id=? AND ontology_id=?",(data.link_type_id,oid)).fetchone()
     source=conn.execute("SELECT * FROM object_instances WHERE id=? AND ontology_id=?",(data.source_instance_id,oid)).fetchone()
     target=conn.execute("SELECT * FROM object_instances WHERE id=? AND ontology_id=?",(data.target_instance_id,oid)).fetchone()
@@ -1484,17 +1601,39 @@ def save_link_instance(oid: str, data: LinkInstanceBase) -> Dict[str, Any]:
         conn.close(); raise ValidationError("实例类型与关系端点定义不一致")
     existing=conn.execute("SELECT id FROM link_instances WHERE link_type_id=? AND source_instance_id=? AND target_instance_id=?",(data.link_type_id,data.source_instance_id,data.target_instance_id)).fetchone()
     if existing: conn.close(); return next(item for item in list_link_instances(oid) if item["id"]==existing["id"])
+    _validate_instance_properties({"properties": json.loads(link["properties"] or "[]")}, data.properties)
+    if link["cardinality"] in {"one_to_one", "many_to_one"} and conn.execute("SELECT 1 FROM link_instances WHERE link_type_id=? AND source_instance_id=?",(data.link_type_id,data.source_instance_id)).fetchone():
+        raise ConflictError("关系基数限制：该起点实例已有关联的终点")
+    if link["cardinality"] in {"one_to_one", "one_to_many"} and conn.execute("SELECT 1 FROM link_instances WHERE link_type_id=? AND target_instance_id=?",(data.link_type_id,data.target_instance_id)).fetchone():
+        raise ConflictError("关系基数限制：该终点实例已有关联的起点")
     cid,timestamp=str(uuid.uuid4()),now(); conn.execute("""INSERT INTO link_instances
         (id,ontology_id,link_type_id,source_instance_id,target_instance_id,properties,created_at,updated_at,created_by,updated_by)
-        VALUES (?,?,?,?,?,?,?,?,?,?)""",(cid,oid,data.link_type_id,data.source_instance_id,data.target_instance_id,_json(data.properties),timestamp,timestamp,"manual-admin","manual-admin")); conn.commit(); conn.close()
+        VALUES (?,?,?,?,?,?,?,?,?,?)""",(cid,oid,data.link_type_id,data.source_instance_id,data.target_instance_id,_json(data.properties),timestamp,timestamp,audit_actor(),audit_actor())); _log(conn,oid,"link_instance",cid,"create",f"建立实例关系 {source['title']} → {link['display_name']} → {target['title']}"); conn.commit(); conn.close()
     return next(item for item in list_link_instances(oid) if item["id"]==cid)
+
+
+@_no_leak
+def update_link_instance(component_id: str, data: LinkInstanceBase) -> Dict[str, Any]:
+    conn=get_conn(); conn.execute("BEGIN IMMEDIATE")
+    current=conn.execute("SELECT * FROM link_instances WHERE id=?",(component_id,)).fetchone()
+    if not current: raise NotFoundError("关系实例不存在")
+    if data.expected_updated_at and data.expected_updated_at != current["updated_at"]:
+        raise ConflictError("关联关系已被更新，请刷新后再编辑")
+    if any(current[key] != getattr(data, key) for key in ("link_type_id", "source_instance_id", "target_instance_id")):
+        raise ValidationError("编辑关系只能修改关系属性；变更端点需先解除原关联")
+    link=conn.execute("SELECT properties FROM link_types WHERE id=?",(data.link_type_id,)).fetchone()
+    _validate_instance_properties({"properties":json.loads(link["properties"] or "[]")},data.properties)
+    conn.execute("UPDATE link_instances SET properties=?,updated_at=?,updated_by=? WHERE id=?",(_json(data.properties),now(),audit_actor(),component_id))
+    _log(conn,current["ontology_id"],"link_instance",component_id,"update","更新实例关系属性")
+    conn.commit(); conn.close()
+    return next(item for item in list_link_instances(current["ontology_id"]) if item["id"] == component_id)
 
 
 @_no_leak
 def delete_link_instance(component_id: str) -> None:
     conn=get_conn(); row=conn.execute("SELECT * FROM link_instances WHERE id=?",(component_id,)).fetchone()
     if not row: conn.close(); raise NotFoundError("关系实例不存在")
-    conn.execute("DELETE FROM link_instances WHERE id=?",(component_id,)); conn.commit(); conn.close()
+    conn.execute("DELETE FROM link_instances WHERE id=?",(component_id,)); _log(conn,row["ontology_id"],"link_instance",component_id,"delete","解除实例关系"); conn.commit(); conn.close()
 
 
 def graph(oid: str) -> Dict[str, Any]:

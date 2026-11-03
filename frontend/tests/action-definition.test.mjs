@@ -66,3 +66,12 @@ test('simple edits preserve all hidden configuration, imported structures and bu
  for (const key of ['definition_config', 'result_schema', 'parameters', 'preconditions', 'side_effects', 'description', 'action_type']) assert.equal(payload[key], undefined, key);
  assert.equal(payload.expected_updated_at, original.updated_at);
 });
+
+test('business editor sends resource references and leaves new action ID to the server', () => {
+ const form = businessActionForm(null, dictionary, [], [{ code: 'RULE-1', name: '负载预警' }]);
+ Object.assign(form, { display_name: '发布负载预警', action_category: 'business', target_object_type_id: 'obj-1', input_parameters_text: '负载等级', precondition_text: '达到关注及以上', trigger_rule_codes: ['RULE-1'], trigger_rule_names: ['负载预警'], execution_logic: '发送通知', owner: '调度' });
+ const payload = businessActionPayload(form);
+ assert.equal(payload.external_id, undefined);
+ assert.deepEqual(payload.trigger_rule_codes, ['RULE-1']);
+ assert.deepEqual(payload.trigger_rules, ['负载预警']);
+});
