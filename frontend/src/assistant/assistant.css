@@ -587,3 +587,10 @@ body.ai-picking .vis-network, body.ai-picking .vis-network canvas { cursor: cros
 .conversation-share-loading { min-height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:#7b8e9e; }
 .conversation-share-loading strong { color:#4e6a7e; font-size:11px; }
 .conversation-share-loading span { font-size:9px; }
+
+/* DeepSeek 式顺序：思考在上，回答在下；回答开始后思考自动折叠 */
+.agent-live-thought, .assistant-live-thought { margin:0 0 7px; }
+.agent-thought, .assistant-thought { margin:0 0 7px; padding:0; border:1px solid #e2ebf2; border-radius:4px; background:#fbfdfe; }
+.agent-thought summary, .assistant-thought summary { padding:6px 8px; color:#61798b; }
+.agent-thought p, .assistant-thought p { margin:0; padding:0 8px 8px; border:0; background:transparent; }
+.agent-thought[open] summary, .assistant-thought[open] summary { border-bottom:1px dashed #e0e9f0; }
