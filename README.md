@@ -153,13 +153,15 @@ v1.10 在不改动模板事实字段和内置案例的前提下完成 P0/P1 前�
 - 高风险删除、主键变化、关系反转和写 Action 必须人工处理。
 - 未配置模型密钥时显示“确定性演示降级”，不会伪装成模型运行。
 
-可选模型配置：
+可选模型配置（本地 `.env` 已被 `.gitignore` 忽略）：
 
 ```bash
-export DEEPSEEK_API_KEY="your-key"
+DEEPSEEK_API_KEY="your-key"
+DEEPSEEK_BASE_URL="https://api.deepseek.com"
+DEEPSEEK_MODEL="deepseek-flash"
 ```
 
-当前原型调用 `https://api.deepseek.com/v1` 的 `deepseek-v4-flash`，并请求最高推理强度。生产实现必须把模型、解析器和执行器做成可替换能力，不应把密钥写入代码、数据库或提交包。
+当前原型调用 `https://api.deepseek.com/chat/completions` 的 `deepseek-flash`。本体智能使用真实模型回答；模型返回的 `reasoning_content` 以“AI 思考”折叠块展示，并随消息写入会话历史。密钥只存在本地 `.env` 或部署环境变量，不写入代码、数据库或提交包。未配置密钥时仍保留演示降级。
 
 ## 6. 技术架构
 

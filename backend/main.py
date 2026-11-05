@@ -159,7 +159,7 @@ def system_status():
         "mode": "hybrid-ontology-development",
         "database": "connected",
         "ai_enabled": bool(os.environ.get("DEEPSEEK_API_KEY")),
-        "model": "deepseek-v4-flash",
+        "model": os.environ.get("DEEPSEEK_MODEL", "deepseek-flash"),
         "ai_policy": "proposal-first",
         "layers": ["schema", "mapping", "logic", "action", "security", "runtime"],
     }

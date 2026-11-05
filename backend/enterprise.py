@@ -173,6 +173,7 @@ def init_enterprise() -> None:
     repo._ensure_column(conn, "ontology_build_runs", "session_id", "TEXT")
     repo._ensure_column(conn, "agent_interactions", "conversation_id", "TEXT")
     repo._ensure_column(conn, "agent_interactions", "context", "TEXT")
+    repo._ensure_column(conn, "agent_interactions", "reasoning", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_agent_interactions_conversation ON agent_interactions(ontology_id, conversation_id, created_at DESC)")
     conn.commit()
     conn.close()
@@ -1343,25 +1344,56 @@ def _extract_json(text: str) -> Dict[str, Any]:
     return json.loads(cleaned[start : end + 1])
 
 
-def _call_deepseek(system_prompt: str, user_prompt: str) -> tuple[Dict[str, Any], str]:
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash").strip() or "deepseek-flash"
+DEEPSEEK_BASE_URL = (os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip() or "https://api.deepseek.com").rstrip("/")
+
+
+def _deepseek_chat(messages: list[Dict[str, Any]], temperature: float = 0.2,
+                   json_mode: bool = False, max_tokens: int = 4096) -> Dict[str, Any]:
+    """Call DeepSeek and keep both the answer and its reasoning content.
+
+    The configured model (``deepseek-flash``) returns ``reasoning_content``
+    separately from the final answer. Reasoning is stored for the console but
+    never treated as an authoritative ontology fact.
+    """
     api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("未配置 DEEPSEEK_API_KEY")
-    payload = {
-        "model": "deepseek-v4-flash",
-        "reasoning_effort": "max",
-        "temperature": 0.15,
-        "response_format": {"type": "json_object"},
-        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+    payload: Dict[str, Any] = {
+        "model": DEEPSEEK_MODEL,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+        "messages": messages,
     }
-    with httpx.Client(timeout=75) as client:
-        response = client.post("https://api.deepseek.com/v1/chat/completions", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload)
-        if response.status_code == 400 and "reasoning_effort" in response.text:
-            payload.pop("reasoning_effort", None)
-            response = client.post("https://api.deepseek.com/v1/chat/completions", headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload)
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+    endpoint = f"{DEEPSEEK_BASE_URL}/chat/completions"
+    with httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
+        response = client.post(endpoint, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload)
+        if response.status_code == 400 and json_mode:
+            payload.pop("response_format", None)
+            response = client.post(endpoint, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload)
         response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
-    return _extract_json(content), response.headers.get("x-request-id", "")
+        body = response.json()
+    choice = (body.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    return {
+        "content": message.get("content") or "",
+        "reasoning": message.get("reasoning_content") or "",
+        "model": body.get("model") or DEEPSEEK_MODEL,
+        "usage": body.get("usage") or {},
+        "request_id": response.headers.get("x-request-id", ""),
+        "finish_reason": choice.get("finish_reason"),
+    }
+
+
+def _call_deepseek(system_prompt: str, user_prompt: str) -> tuple[Dict[str, Any], str]:
+    result = _deepseek_chat([
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ], temperature=0.15, json_mode=True)
+    return _extract_json(result["content"]), result.get("request_id", "")
 
 
 def _fallback_proposal(ontology_id: str, evidence_text: str, mode: str = "update", change_scope: str = "增量完善") -> Dict[str, Any]:
@@ -1535,7 +1567,7 @@ def analyze_evidence(ontology_id: str, request: AIAnalyzeRequest) -> Dict[str, A
     proposal_id, timestamp = str(uuid.uuid4()), repo.now()
     conn = repo.get_conn()
     proposal_title = f"{'新本体创建' if mode == 'create' else '现有本体更新'}提案 · {timestamp[5:16].replace('T', ' ')}"
-    conn.execute("INSERT INTO ontology_proposals VALUES (?,?,?,?,?,?,?,?,?,?,?)", (proposal_id, ontology_id, proposal_title, request.instruction, _json([row["id"] for row in rows]), "review", "deepseek-v4-flash", run_mode, result.get("summary", ""), timestamp, timestamp))
+    conn.execute("INSERT INTO ontology_proposals VALUES (?,?,?,?,?,?,?,?,?,?,?)", (proposal_id, ontology_id, proposal_title, request.instruction, _json([row["id"] for row in rows]), "review", DEEPSEEK_MODEL, run_mode, result.get("summary", ""), timestamp, timestamp))
     for index, item in enumerate(operations[:80]):
         confidence = max(0.0, min(1.0, float(item.get("confidence", 0.65))))
         conn.execute("""INSERT INTO proposal_operations
@@ -1552,7 +1584,7 @@ def analyze_evidence(ontology_id: str, request: AIAnalyzeRequest) -> Dict[str, A
     conn = repo.get_conn()
     conn.execute("""INSERT INTO ontology_build_runs
         (id,ontology_id,scenario_id,status,strategy,model,run_mode,rounds,metrics,proposal_id,created_at,session_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (build_run_id, ontology_id, request.scenario_id, "completed", request.strategy, "deepseek-v4-flash", run_mode, _json(rounds), _json(metrics), proposal_id, timestamp, request.session_id))
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (build_run_id, ontology_id, request.scenario_id, "completed", request.strategy, DEEPSEEK_MODEL, run_mode, _json(rounds), _json(metrics), proposal_id, timestamp, request.session_id))
     if request.session_id:
         conn.execute("UPDATE ontology_build_sessions SET proposal_id=?,status='review',current_step=4,updated_at=? WHERE id=?", (proposal_id, repo.now(), request.session_id))
     conn.commit(); conn.close()
@@ -1830,6 +1862,72 @@ def _discover_scenario_resources(ontology_id: str, message: str) -> Optional[Dic
     }
 
 
+def _agent_prior_messages(ontology_id: str, conversation_id: str, limit: int = 8) -> list[Dict[str, str]]:
+    if not conversation_id:
+        return []
+    conn = repo.get_conn()
+    rows = conn.execute(
+        """SELECT user_message,answer FROM agent_interactions
+           WHERE ontology_id=? AND conversation_id=? ORDER BY created_at DESC LIMIT ?""",
+        (ontology_id, conversation_id, max(2, min(limit, 20))),
+    ).fetchall()
+    conn.close()
+    messages: list[Dict[str, str]] = []
+    for row in reversed(rows):
+        user_text = str(row["user_message"] or "")[:3000]
+        answer_text = str(row["answer"] or "")[:6000]
+        if user_text:
+            messages.append({"role": "user", "content": user_text})
+        if answer_text:
+            messages.append({"role": "assistant", "content": answer_text})
+    return messages[-limit:]
+
+
+def _agent_runtime_context(ontology_id: str, ontology: Dict[str, Any], objects: list[Dict[str, Any]],
+                           links: list[Dict[str, Any]], rules: list[Dict[str, Any]],
+                           actions: list[Dict[str, Any]]) -> Dict[str, Any]:
+    """Compact but useful ontology context for the real model call."""
+    def clip(value: Any, limit: int = 260) -> str:
+        return str(value or "")[:limit]
+    objects_payload = []
+    for item in objects:
+        properties = item.get("effective_properties") or item.get("properties") or []
+        objects_payload.append({
+            "api_name": item.get("name"), "display_name": item.get("display_name"),
+            "description": clip(item.get("description")), "business_domain": item.get("business_domain_name"),
+            "subject_domain": item.get("subject_domain_name"), "is_core": bool(item.get("is_core")),
+            "properties": [{
+                "key": prop.get("key"), "name": prop.get("name"), "type": prop.get("type"),
+                "primary_key": bool(prop.get("is_primary_key")), "required": bool(prop.get("is_required")),
+                "description": clip(prop.get("description") or prop.get("business_definition"), 160),
+            } for prop in properties],
+        })
+    links_payload = [{
+        "api_name": item.get("name"), "display_name": item.get("display_name"),
+        "source": item.get("source_display_name"), "target": item.get("target_display_name"),
+        "cardinality": item.get("cardinality"), "description": clip(item.get("description")),
+    } for item in links]
+    rules_payload = [{
+        "api_name": item.get("name"), "display_name": item.get("display_name"),
+        "target": item.get("target_display_name"), "severity": item.get("severity"),
+        "description": clip(item.get("description")), "expression": clip(item.get("expression"), 500),
+    } for item in rules]
+    actions_payload = [{
+        "api_name": item.get("name"), "display_name": item.get("display_name"),
+        "target": item.get("target_display_name"), "action_type": item.get("action_type"),
+        "description": clip(item.get("description")), "approval_required": bool(item.get("approval_required")),
+    } for item in actions]
+    source_rows = list_resources(ontology_id, "data-sources")
+    sources_payload = [{"code": item.get("code"), "name": item.get("name"), "system_type": item.get("system_type")} for item in source_rows]
+    mapping_rows = list_resources(ontology_id, "data-mappings")
+    return {
+        "ontology": {"name": ontology.get("name"), "namespace": ontology.get("namespace"), "description": clip(ontology.get("description"), 500)},
+        "statistics": {"objects": len(objects), "links": len(links), "rules": len(rules), "actions": len(actions), "sources": len(sources_payload), "mappings": len(mapping_rows)},
+        "objects": objects_payload, "links": links_payload, "rules": rules_payload, "actions": actions_payload,
+        "data_sources": sources_payload,
+    }
+
+
 def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
     ontology = repo.get_ontology(ontology_id)
     objects, links, rules, actions = repo.list_object_types(ontology_id), repo.list_link_types(ontology_id), repo.list_business_rules(ontology_id), repo.list_actions(ontology_id)
@@ -1852,12 +1950,40 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
     if selection:
         labels = "、".join(str(item.get("label") or item.get("id")) for item in selection[:8])
         trace.append({"tool": "ontology.selection", "label": "读取选中资源", "status": "completed", "result": f"{len(selection)} 项：{labels}"})
-    context = {"ontology": ontology["name"], "objects": [item["display_name"] for item in objects], "links": [item["display_name"] for item in links], "rules": [item["display_name"] for item in rules], "actions": [item["display_name"] for item in actions], "selection": selection}
+    context = _agent_runtime_context(ontology_id, ontology, objects, links, rules, actions)
+    context["selection"] = selection
+    conversation_id = str((request.context or {}).get("conversation_id") or "").strip() or str(uuid.uuid4())
+    prior_messages = _agent_prior_messages(ontology_id, conversation_id)
     run_mode = "deepseek"
+    reasoning = ""
+    usage: Dict[str, Any] = {}
+    model_name = DEEPSEEK_MODEL
+    model_error = None
+    system_prompt = (
+        "你是企业本体运行时助手，服务对象是本体建模、数据治理和业务分析人员。"
+        "只基于提供的当前本体上下文、选中资源和历史对话回答；不要编造对象、属性、关系、规则、动作或实例。"
+        "回答使用中文，先给结论，再用分点说明依据；重要判断要引用具体对象、关系、规则或动作名称。"
+        "如果用户要求写操作、发布或执行，明确说明只能提供建议并要求人工确认，不能声称已经执行。"
+        "当前本体的规模、对象属性、关系端点、规则和动作都在上下文中；无法确定时直接说明缺少什么信息。"
+    )
+    user_prompt = (
+        "请回答用户问题。以下是当前本体运行时上下文（JSON）：\n"
+        f"{_json(context)}\n\n本轮选中资源：{_json(selection)}\n"
+        f"用户问题：{request.message}\n动作确认状态：{bool(request.confirm_action)}"
+    )
     try:
-        result, _ = _call_deepseek("你是企业本体运行时助手。只基于给定本体资源回答；说明使用了哪些对象、关系、规则或动作；不伪造实例；涉及写操作必须先要求确认。用户可能选中了若干资源，优先围绕选中资源回答，并说明依据。返回 JSON：{answer:string}。", f"本体上下文：{_json(context)}\n选中资源：{_json(selection)}\n用户：{request.message}\n动作确认状态：{request.confirm_action}")
-        answer = result.get("answer") or "已完成基于本体的分析。"
-    except Exception:
+        result = _deepseek_chat(
+            [{"role": "system", "content": system_prompt}, *prior_messages, {"role": "user", "content": user_prompt}],
+            temperature=0.2, json_mode=False, max_tokens=4096,
+        )
+        answer = (result.get("content") or "").strip() or "模型未返回有效回答。"
+        reasoning = str(result.get("reasoning") or "")[:20000]
+        usage = result.get("usage") or {}
+        model_name = result.get("model") or DEEPSEEK_MODEL
+        trace.append({"tool": "deepseek.chat", "label": f"模型推理 · {model_name}", "status": "completed", "result": f"{usage.get('total_tokens', '—')} tokens · {result.get('request_id') or '无请求ID'}"})
+    except Exception as exc:
+        model_error = str(exc)[:300]
+        trace.append({"tool": "deepseek.chat", "label": f"模型推理 · {DEEPSEEK_MODEL}", "status": "failed", "result": model_error})
         run_mode = "demo_fallback"
         if action_proposal and not request.confirm_action:
             answer = f"我已在“{ontology['name']}”中定位到可执行动作“{action_proposal['action']}”。这是写操作，需要你确认后才能继续；当前未对任何业务数据做修改。"
@@ -1889,18 +2015,19 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
                   f"对象 {len(scenario_discovery['objects'])} 个、关系 {len(scenario_discovery['links'])} 条、规则 {len(scenario_discovery['rules'])} 条、行动 {len(scenario_discovery['actions'])} 个、关联系统 {len(scenario_discovery['sources'])} 个。"
                   "你可以在回答下方展开表单调整场景名称、目标和触发条件，再应用到业务场景创建弹窗。AI 不会直接保存或发布。")
     interaction_id, timestamp = str(uuid.uuid4()), repo.now()
-    conversation_id = str((request.context or {}).get("conversation_id") or "").strip() or str(uuid.uuid4())
     conn = repo.get_conn()
     conn.execute("""INSERT INTO agent_interactions
-        (id,ontology_id,user_message,answer,trace,action_proposal,run_mode,model,created_at,conversation_id,context)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (id,ontology_id,user_message,answer,trace,action_proposal,run_mode,model,created_at,conversation_id,context,reasoning)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (interaction_id, ontology_id, request.message, answer, _json(trace),
-         _json(action_proposal) if action_proposal else None, run_mode, "deepseek-v4-flash",
-         timestamp, conversation_id, _json({**(request.context or {}), **({"scenario_discovery": scenario_discovery} if scenario_discovery else {})})))
+         _json(action_proposal) if action_proposal else None, run_mode, model_name,
+         timestamp, conversation_id, _json({**(request.context or {}), **({"scenario_discovery": scenario_discovery} if scenario_discovery else {})}), reasoning or None))
     conn.commit()
     conn.close()
     return {"id": interaction_id, "conversation_id": conversation_id, "answer": answer, "trace": trace,
-            "action_proposal": action_proposal, "scenario_discovery": scenario_discovery, "model": "deepseek-v4-flash", "run_mode": run_mode}
+            "action_proposal": action_proposal, "scenario_discovery": scenario_discovery,
+            "reasoning": reasoning, "usage": usage, "model": model_name, "run_mode": run_mode,
+            "model_error": model_error}
 
 
 def agent_history(ontology_id: str, limit: int = 100) -> Dict[str, Any]:
@@ -1953,7 +2080,7 @@ def agent_history(ontology_id: str, limit: int = 100) -> Dict[str, Any]:
             assistant_message = {
                 "role": "assistant", "text": item["answer"], "trace": trace,
                 "action_proposal": action_proposal, "scenario_discovery": context.get("scenario_discovery"),
-                "run_mode": item["run_mode"], "model": item["model"], "created_at": item["created_at"],
+                "reasoning": item.get("reasoning") or "", "run_mode": item["run_mode"], "model": item["model"], "created_at": item["created_at"],
             }
             messages.append(user_message)
             messages.append(assistant_message)

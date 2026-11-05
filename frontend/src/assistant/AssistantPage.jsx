@@ -7,8 +7,9 @@ import { api, formatTime } from '../api';
 import { useAssistant } from './AssistantContext';
 import { RESOURCE_TYPE_LABELS, quickActions } from './selection';
 import ScenarioDiscoveryCard from './ScenarioDiscoveryCard';
+import ModelAnswer from './ModelAnswer';
 
-const MODEL_LABEL = 'DeepSeek V4 Flash';
+const MODEL_LABEL = 'DeepSeek Flash';
 const MAX_CHARS = 8000;
 const STARTERS = [
   '这个本体包含哪些核心业务对象？',
@@ -138,10 +139,11 @@ export default function AssistantPage() {
           <span className="agent-thread-avatar">{message.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}</span>
           <div className="agent-thread-body">
             {message.resources?.length > 0 && <div className="agent-thread-resources">{message.resources.map((item, resourceIndex) => <span key={`${item.type}-${item.id}-${resourceIndex}`}><Boxes size={12} />{RESOURCE_TYPE_LABELS[item.type] || '资源'} · {item.label}</span>)}</div>}
-            <p>{message.text}</p>
+            {message.role === 'assistant' ? <ModelAnswer text={message.text} /> : <p>{message.text}</p>}
             {(message.thinking_mode || message.web_search) && <div className="agent-thread-tags">{message.thinking_mode && <span><Sparkles size={11} /> 思考模式</span>}{message.web_search && <span><Globe2 size={11} /> 联网检索</span>}</div>}
             {message.trace?.length > 0 && <details className="agent-trace"><summary>查看本体工具轨迹 · {message.trace.length} 步</summary>{message.trace.map((step, traceIndex) => <span key={traceIndex}><em>{traceIndex + 1}</em><b>{step.label}</b><small>{step.result}</small><CheckCircle2 size={13} /></span>)}</details>}
-            {message.runMode && <small className="agent-run-mode">{message.runMode === 'deepseek' ? 'DeepSeek 实际运行' : '演示降级模式'}</small>}
+            {message.runMode && <small className="agent-run-mode">{message.runMode === 'deepseek' ? `${message.model || MODEL_LABEL} · 实际运行` : '演示降级模式'}</small>}
+            {message.reasoning && <details className="agent-thought"><summary><Sparkles size={12} /> AI 思考 <em>模型原始思考内容</em></summary><p>{message.reasoning}</p></details>}
             {message.proposal && <small className="agent-run-mode">已生成动作提案，未执行</small>}
             {(message.scenarioDiscovery || message.scenario_discovery) && <ScenarioDiscoveryCard discovery={message.scenarioDiscovery || message.scenario_discovery} />}
           </div>

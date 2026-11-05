@@ -181,6 +181,9 @@ export function AssistantProvider({ activeId, active, notify, children }) {
         runMode: result.run_mode,
         proposal: result.action_proposal,
         scenarioDiscovery: result.scenario_discovery,
+        reasoning: result.reasoning || '',
+        model: result.model || '',
+        usage: result.usage || null,
       }]);
       setRevision((value) => value + 1);
     } catch (error) {
@@ -212,7 +215,7 @@ export function AssistantProvider({ activeId, active, notify, children }) {
 
   const loadConversation = useCallback((conversation) => {
     const nextMessages = (conversation.messages || []).map((message) => message.role === 'assistant'
-      ? { ...message, runMode: message.run_mode || message.runMode, scenarioDiscovery: message.scenario_discovery || message.scenarioDiscovery }
+      ? { ...message, runMode: message.run_mode || message.runMode, scenarioDiscovery: message.scenario_discovery || message.scenarioDiscovery, reasoning: message.reasoning || message.reasoning_content || '' }
       : message);
     setConversationId(conversation.id);
     setMessages(nextMessages);

@@ -537,3 +537,24 @@ body.ai-picking .vis-network, body.ai-picking .vis-network canvas { cursor: cros
   .scenario-discovery-form { border-left:0; border-top:1px solid #e1ebf1; }
   .scenario-discovery-title small { display:none; }
 }
+
+/* 真实模型思考内容 */
+.agent-thought, .assistant-thought { margin-top:7px; border-top:1px dashed #dce8f0; }
+.agent-thought summary, .assistant-thought summary { display:inline-flex; align-items:center; gap:4px; padding:4px 0 3px; color:#6a7f91; font-size:8px; cursor:pointer; list-style:none; }
+.agent-thought summary::-webkit-details-marker, .assistant-thought summary::-webkit-details-marker { display:none; }
+.agent-thought summary em { color:#9aa8b2; font-size:7.5px; font-style:normal; }
+.agent-thought p, .assistant-thought p { max-height:210px; overflow:auto; margin:2px 0 0; padding:7px 8px; color:#718695; background:#f8fafc; border:1px solid #e4edf2; border-radius:3px; font-size:8.5px; line-height:1.55; white-space:pre-wrap; }
+.agent-thread-message.user .agent-thought { display:none; }
+
+/* 真实模型回答的轻量 Markdown 呈现 */
+.model-answer { color:#2d4b62; font-size:12px; line-height:1.7; }
+.model-answer-h { margin:10px 0 5px; color:#23465f; font-size:12px; line-height:1.5; }
+.model-answer-h.level-1 { font-size:14px; }
+.model-answer-p { margin:5px 0; }
+.model-answer-list { margin:4px 0 7px; padding-left:19px; }
+.model-answer-list li { margin:2px 0; }
+.model-answer strong { color:#1e4058; font-weight:650; }
+.model-answer code { padding:1px 4px; color:#285b7b; background:#eff7fb; border:1px solid #d8e9f2; border-radius:3px; font-size:10px; }
+.model-answer hr { margin:9px 0; border:0; border-top:1px solid #e4edf2; }
+.agent-thread-body .model-answer { color:#2d4b62; }
+.assistant-bubble .model-answer { font-size:11px; line-height:1.65; }
