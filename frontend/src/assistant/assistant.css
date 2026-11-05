@@ -558,3 +558,24 @@ body.ai-picking .vis-network, body.ai-picking .vis-network canvas { cursor: cros
 .model-answer hr { margin:9px 0; border:0; border-top:1px solid #e4edf2; }
 .agent-thread-body .model-answer { color:#2d4b62; }
 .assistant-bubble .model-answer { font-size:11px; line-height:1.65; }
+
+/* 流式思考：回答生成中展开，完成后折叠 */
+.agent-live-thought, .assistant-live-thought { margin-top:7px; padding:7px 8px; background:#f8fafc; border:1px solid #dfeaf1; border-radius:4px; }
+.agent-live-thought header, .assistant-live-thought header { display:flex; align-items:center; gap:4px; color:#6b7f91; font-size:8px; }
+.agent-live-thought header i, .assistant-live-thought header i { width:5px; height:5px; margin-left:2px; border-radius:50%; background:#6a50ad; animation:assistant-thought-pulse 1s ease-in-out infinite; }
+.agent-live-thought p, .assistant-live-thought p { max-height:190px; overflow:auto; margin:5px 0 0; color:#718695; font-size:8.5px; line-height:1.55; white-space:pre-wrap; }
+.agent-stream-placeholder, .assistant-stream-placeholder { color:#7d91a1 !important; font-size:10px !important; font-style:italic; }
+@keyframes assistant-thought-pulse { 0%,100% { opacity:.25; transform:scale(.8); } 50% { opacity:1; transform:scale(1.15); } }
+
+/* 悬窗放大为 85% 窗口，覆盖当前页面（如图谱），不跳转菜单 */
+.assistant-max-backdrop { position:fixed; inset:0; z-index:129; background:rgba(17,35,56,.28); backdrop-filter:blur(1.5px); }
+.assistant-panel.maximized { top:7.5vh; left:7.5vw; right:auto; bottom:auto; width:85vw; height:85vh; z-index:130; border-radius:14px; box-shadow:0 28px 90px rgba(8,30,55,.32); }
+.assistant-panel.maximized .assistant-panel-head { height:58px; padding-left:18px; padding-right:12px; }
+.assistant-panel.maximized .assistant-panel-head b { font-size:14px; }
+.assistant-panel.maximized .assistant-messages { padding:20px 8% 10px; }
+.assistant-panel.maximized .assistant-msg { max-width:1100px; margin-left:auto; margin-right:auto; }
+.assistant-panel.maximized .assistant-bubble { max-width:min(760px,82%); }
+.assistant-panel.maximized .assistant-composer { padding:10px max(12px,8%) 14px; }
+@media (max-width:800px) {
+  .assistant-panel.maximized { top:2vh; left:2vw; width:96vw; height:96vh; }
+}

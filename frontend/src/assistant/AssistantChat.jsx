@@ -27,7 +27,7 @@ export default function AssistantChat({ compact = false, showPicker = true }) {
         <i className="assistant-avatar">{message.role === 'assistant' ? <Bot size={15} /> : <User size={15} />}</i>
         <div className={`assistant-bubble ${message.error ? 'error' : ''}`}>
           {message.resources?.length > 0 && <div className="assistant-msg-resources"><small><Paperclip size={10} /> 随问题发送</small>{message.resources.map((item, resourceIndex) => <span key={`${item.type}-${item.id}-${resourceIndex}`}><i>{RESOURCE_TYPE_LABELS[item.type] || '资源'}</i><b title={item.parent ? `${item.label} · 所属 ${item.parent}` : item.label}>{item.label}</b></span>)}</div>}
-          {message.role === 'assistant' ? <ModelAnswer text={message.text} /> : <p>{message.text}</p>}
+          {message.role === 'assistant' ? <>{message.streaming && !message.text ? <p className="assistant-stream-placeholder">正在分析本体并组织回答…</p> : <ModelAnswer text={message.text} />}</> : <p>{message.text}</p>}
           {message.trace?.length > 0 && <details className="assistant-trace">
             <summary>本体工具轨迹 · {message.trace.length} 步</summary>
             {message.trace.map((step, stepIndex) => <div key={stepIndex}>
@@ -37,11 +37,12 @@ export default function AssistantChat({ compact = false, showPicker = true }) {
             </div>)}
           </details>}
           {message.runMode && <small className="assistant-runmode">{message.runMode === 'deepseek' ? `${message.model || 'DeepSeek Flash'} 运行` : '演示降级模式'}</small>}
-          {message.reasoning && <details className="assistant-thought"><summary><Sparkles size={11} /> AI 思考</summary><p>{message.reasoning}</p></details>}
+          {message.streaming && message.reasoning && <div className="assistant-live-thought"><header><Sparkles size={11} /> AI 正在思考 <i /></header><p>{message.reasoning}</p></div>}
+          {!message.streaming && message.reasoning && <details className="assistant-thought"><summary><Sparkles size={11} /> AI 思考</summary><p>{message.reasoning}</p></details>}
           {(message.scenarioDiscovery || message.scenario_discovery) && <ScenarioDiscoveryCard discovery={message.scenarioDiscovery || message.scenario_discovery} />}
         </div>
       </article>)}
-      {busy && <article className="assistant-msg assistant">
+      {busy && !messages.some((message) => message.streaming) && <article className="assistant-msg assistant">
         <i className="assistant-avatar"><Bot size={15} /></i>
         <div className="assistant-bubble thinking"><LoaderCircle className="spin" size={14} /> 正在读取选中资源与本体上下文…</div>
       </article>}

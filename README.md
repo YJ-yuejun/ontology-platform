@@ -161,7 +161,7 @@ DEEPSEEK_BASE_URL="https://api.deepseek.com"
 DEEPSEEK_MODEL="deepseek-flash"
 ```
 
-当前原型调用 `https://api.deepseek.com/chat/completions` 的 `deepseek-flash`。本体智能使用真实模型回答；模型返回的 `reasoning_content` 以“AI 思考”折叠块展示，并随消息写入会话历史。密钥只存在本地 `.env` 或部署环境变量，不写入代码、数据库或提交包。未配置密钥时仍保留演示降级。
+当前原型调用 `https://api.deepseek.com/chat/completions` 的 `deepseek-flash`。本体智能使用真实模型回答；通过 `/agent/chat/stream` 流式返回 reasoning 和回答，生成中实时展开思考，完成后折叠为“AI 思考”，并随消息写入会话历史。浮窗最大化以 85% 窗口覆盖当前页面，不跳转菜单。密钥只存在本地 `.env` 或部署环境变量，不写入代码、数据库或提交包。未配置密钥时仍保留演示降级。
 
 ## 6. 技术架构
 

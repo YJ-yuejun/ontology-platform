@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import repository as repo
@@ -784,6 +784,15 @@ def decide_proposal_operation(operation_id: str, data: ProposalDecision):
 @app.post("/api/proposals/{proposal_id}/merge")
 def merge_proposal(proposal_id: str):
     return enterprise.merge_proposal(proposal_id)
+
+
+@app.post("/api/ontologies/{ontology_id}/agent/chat/stream")
+def ontology_agent_chat_stream(ontology_id: str, data: AgentChatRequest):
+    return StreamingResponse(
+        enterprise.agent_chat_stream(ontology_id, data),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post("/api/ontologies/{ontology_id}/agent/chat")

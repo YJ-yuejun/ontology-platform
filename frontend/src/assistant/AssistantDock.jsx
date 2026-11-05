@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, History, LoaderCircle, Maximize2, Plus, Scan, Search, X } from 'lucide-react';
+import { Bot, History, LoaderCircle, Maximize2, Minimize2, Plus, Scan, Search, X } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { api, formatTime } from '../api';
 import AssistantChat from './AssistantChat';
@@ -22,6 +22,7 @@ export default function AssistantDock() {
   const [conversations, setConversations] = useState([]);
   const [historyQuery, setHistoryQuery] = useState('');
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
     if (!assistant.open) { setHistoryOpen(false); return; }
@@ -84,7 +85,9 @@ export default function AssistantDock() {
     setHistoryOpen(false);
   };
 
-  return <section className="assistant-panel" aria-label="本体智能">
+  return <>
+    {maximized && <div className="assistant-max-backdrop" onClick={() => setMaximized(false)} />}
+    <section className={`assistant-panel ${maximized ? 'maximized' : ''}`} aria-label="本体智能">
     <header className="assistant-panel-head">
       <div>
         <i><Bot size={16} /></i>
@@ -93,8 +96,8 @@ export default function AssistantDock() {
       <div className="assistant-panel-actions">
         <button type="button" onClick={() => { setHistoryOpen((value) => !value); }} title="历史对话" aria-label="历史对话" disabled={assistant.busy}><History size={15} /></button>
         <button type="button" onClick={startNew} title="新建对话" aria-label="新建对话" disabled={assistant.busy}><Plus size={15} /></button>
-        <button type="button" onClick={assistant.expand} title="最大化"><Maximize2 size={15} /></button>
-        <button type="button" onClick={() => assistant.setOpen(false)} title="收起"><X size={16} /></button>
+        <button type="button" onClick={() => setMaximized((value) => !value)} title={maximized ? '还原小窗' : '放大到 85% 窗口'}>{maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
+        <button type="button" onClick={() => { setMaximized(false); assistant.setOpen(false); }} title="收起"><X size={16} /></button>
       </div>
     </header>
 
@@ -113,6 +116,7 @@ export default function AssistantDock() {
       <footer><button type="button" onClick={startNew} disabled={assistant.busy}><Plus size={14} /> 新建对话</button></footer>
     </div>}
 
-    {assistant.hydrating ? <div className="assistant-dock-loading"><LoaderCircle className="spin" size={18} /><span>正在恢复最近对话…</span></div> : <AssistantChat compact />}
-  </section>;
+    {assistant.hydrating ? <div className="assistant-dock-loading"><LoaderCircle className="spin" size={18} /><span>正在恢复最近对话…</span></div> : <AssistantChat compact={!maximized} />}
+    </section>
+  </>;
 }

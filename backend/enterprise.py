@@ -1388,6 +1388,50 @@ def _deepseek_chat(messages: list[Dict[str, Any]], temperature: float = 0.2,
     }
 
 
+def _deepseek_stream(messages: list[Dict[str, Any]], temperature: float = 0.2,
+                     max_tokens: int = 4096):
+    """Yield DeepSeek deltas (reasoning_content and content) as SSE-ready dicts."""
+    api_key = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("未配置 DEEPSEEK_API_KEY")
+    payload: Dict[str, Any] = {
+        "model": DEEPSEEK_MODEL, "temperature": temperature, "max_tokens": max_tokens,
+        "stream": True, "stream_options": {"include_usage": True}, "messages": messages,
+    }
+    endpoint = f"{DEEPSEEK_BASE_URL}/chat/completions"
+    with httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
+        with client.stream("POST", endpoint, headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, json=payload) as response:
+            response.raise_for_status()
+            model_name = DEEPSEEK_MODEL
+            request_id = response.headers.get("x-request-id", "")
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", errors="ignore")
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                model_name = chunk.get("model") or model_name
+                usage = chunk.get("usage") or {}
+                choice = (chunk.get("choices") or [{}])[0]
+                delta = choice.get("delta") or {}
+                reasoning = delta.get("reasoning_content") or ""
+                content = delta.get("content") or ""
+                if reasoning:
+                    yield {"type": "reasoning", "text": reasoning}
+                if content:
+                    yield {"type": "content", "text": content}
+                if usage:
+                    yield {"type": "usage", "usage": usage, "model": model_name, "request_id": request_id}
+
+
 def _call_deepseek(system_prompt: str, user_prompt: str) -> tuple[Dict[str, Any], str]:
     result = _deepseek_chat([
         {"role": "system", "content": system_prompt},
@@ -2028,6 +2072,89 @@ def agent_chat(ontology_id: str, request: AgentChatRequest) -> Dict[str, Any]:
             "action_proposal": action_proposal, "scenario_discovery": scenario_discovery,
             "reasoning": reasoning, "usage": usage, "model": model_name, "run_mode": run_mode,
             "model_error": model_error}
+
+
+def _sse(event: str, payload: Dict[str, Any]) -> str:
+    return f"event: {event}\ndata: {_json(payload)}\n\n"
+
+
+def agent_chat_stream(ontology_id: str, request: AgentChatRequest):
+    """SSE version of agent_chat: stream reasoning, then answer, then persist."""
+    ontology = repo.get_ontology(ontology_id)
+    objects, links, rules, actions = repo.list_object_types(ontology_id), repo.list_link_types(ontology_id), repo.list_business_rules(ontology_id), repo.list_actions(ontology_id)
+    trace = [{"tool": "ontology.search", "label": "检索本体资源", "status": "completed", "result": f"命中 {len(objects)} 类对象、{len(links)} 类关系"}]
+    scenario_discovery = None
+    if "业务量" in request.message and ("预警" in request.message or "调度" in request.message):
+        scenario_discovery = _discover_scenario_resources(ontology_id, request.message)
+        if scenario_discovery:
+            trace.append({"tool": "scenario.package", "label": "识别业务场景资源包", "status": "completed", "result": f"{len(scenario_discovery['objects'])} 个对象、{len(scenario_discovery['links'])} 条关系、{len(scenario_discovery['rules'])} 条规则、{len(scenario_discovery['actions'])} 个动作"})
+    action_proposal = None
+    risky = any(word in request.message for word in ("关闭", "停机", "删除", "审批", "付款", "执行"))
+    matching_action = next((item for item in actions if any(token in request.message for token in item["display_name"].replace("Action", "").split())), None)
+    if risky:
+        matching_action = matching_action or (actions[0] if actions else None)
+        if matching_action:
+            action_proposal = {"action_id": matching_action["id"], "action": matching_action["display_name"], "target": matching_action["target_display_name"], "confirmation_required": not request.confirm_action, "status": "executed_demo" if request.confirm_action else "awaiting_confirmation", "note": "高风险动作在原型中只演示确认与审计，不写入生产系统。"}
+            trace.append({"tool": "ontology.action", "label": matching_action["display_name"], "status": "confirmed" if request.confirm_action else "confirmation_required", "result": action_proposal["status"]})
+    selection = request.context.get("selection") or []
+    if selection:
+        labels = "、".join(str(item.get("label") or item.get("id")) for item in selection[:8])
+        trace.append({"tool": "ontology.selection", "label": "读取选中资源", "status": "completed", "result": f"{len(selection)} 项：{labels}"})
+    context = _agent_runtime_context(ontology_id, ontology, objects, links, rules, actions)
+    context["selection"] = selection
+    conversation_id = str((request.context or {}).get("conversation_id") or "").strip() or str(uuid.uuid4())
+    prior_messages = _agent_prior_messages(ontology_id, conversation_id)
+    system_prompt = (
+        "你是企业本体运行时助手，服务对象是本体建模、数据治理和业务分析人员。"
+        "只基于提供的当前本体上下文、选中资源和历史对话回答；不要编造对象、属性、关系、规则、动作或实例。"
+        "回答使用中文，先给结论，再用分点说明依据；重要判断要引用具体对象、关系、规则或动作名称。"
+        "如果用户要求写操作、发布或执行，明确说明只能提供建议并要求人工确认，不能声称已经执行。"
+        "当前本体的规模、对象属性、关系端点、规则和动作都在上下文中；无法确定时直接说明缺少什么信息。"
+    )
+    user_prompt = (
+        "请回答用户问题。以下是当前本体运行时上下文（JSON）：\n"
+        f"{_json(context)}\n\n本轮选中资源：{_json(selection)}\n"
+        f"用户问题：{request.message}\n动作确认状态：{bool(request.confirm_action)}"
+    )
+    yield _sse("meta", {"conversation_id": conversation_id, "model": DEEPSEEK_MODEL, "run_mode": "deepseek"})
+    answer_parts: list[str] = []
+    reasoning_parts: list[str] = []
+    usage: Dict[str, Any] = {}
+    model_name = DEEPSEEK_MODEL
+    try:
+        for item in _deepseek_stream([{"role": "system", "content": system_prompt}, *prior_messages, {"role": "user", "content": user_prompt}], temperature=0.2, max_tokens=4096):
+            if item["type"] == "reasoning":
+                reasoning_parts.append(item["text"])
+                yield _sse("reasoning", {"delta": item["text"]})
+            elif item["type"] == "content":
+                answer_parts.append(item["text"])
+                yield _sse("answer", {"delta": item["text"]})
+            elif item["type"] == "usage":
+                usage = item.get("usage") or usage
+                model_name = item.get("model") or model_name
+        answer = "".join(answer_parts).strip() or "模型未返回有效回答。"
+        reasoning = "".join(reasoning_parts).strip()[:20000]
+        trace.append({"tool": "deepseek.chat", "label": f"模型推理 · {model_name}", "status": "completed", "result": f"{usage.get('total_tokens', '—')} tokens · streaming"})
+        if scenario_discovery:
+            answer = (answer.rstrip() + "\n\n我把它整理成一个可审核的业务场景资源包："
+                      f"对象 {len(scenario_discovery['objects'])} 个、关系 {len(scenario_discovery['links'])} 条、规则 {len(scenario_discovery['rules'])} 条、行动 {len(scenario_discovery['actions'])} 个、关联系统 {len(scenario_discovery['sources'])} 个。"
+                      "你可以在回答下方展开表单调整场景名称、目标和触发条件，再应用到业务场景创建弹窗。AI 不会直接保存或发布。")
+        interaction_id, timestamp = str(uuid.uuid4()), repo.now()
+        conn = repo.get_conn()
+        conn.execute("""INSERT INTO agent_interactions
+            (id,ontology_id,user_message,answer,trace,action_proposal,run_mode,model,created_at,conversation_id,context,reasoning)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (interaction_id, ontology_id, request.message, answer, _json(trace),
+             _json(action_proposal) if action_proposal else None, "deepseek", model_name,
+             timestamp, conversation_id, _json({**(request.context or {}), **({"scenario_discovery": scenario_discovery} if scenario_discovery else {})}), reasoning or None))
+        conn.commit()
+        conn.close()
+        result = {"id": interaction_id, "conversation_id": conversation_id, "answer": answer, "trace": trace,
+                  "action_proposal": action_proposal, "scenario_discovery": scenario_discovery,
+                  "reasoning": reasoning, "usage": usage, "model": model_name, "run_mode": "deepseek", "model_error": None}
+        yield _sse("done", result)
+    except Exception as exc:
+        yield _sse("error", {"message": str(exc)[:300]})
 
 
 def agent_history(ontology_id: str, limit: int = 100) -> Dict[str, Any]:

@@ -16,6 +16,47 @@ const MAX_ITEMS = 20;
 const randomConversationId = () => globalThis.crypto?.randomUUID?.()
   || `assistant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+async function consumeAgentStream(url, body, onEvent) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    let detail = text;
+    try { detail = JSON.parse(text).detail || text; } catch { /* keep raw */ }
+    throw new Error(detail || `请求失败（${response.status}）`);
+  }
+  if (!response.body) throw new Error('当前浏览器不支持流式响应');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    buffer = buffer.replace(/\r\n/g, '\n');
+    let boundary = buffer.indexOf('\n\n');
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      let event = 'message';
+      let data = '';
+      block.split('\n').forEach((line) => {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        if (line.startsWith('data:')) data += line.slice(5).trim();
+      });
+      if (data) {
+        let payload;
+        try { payload = JSON.parse(data); } catch { payload = { text: data }; }
+        await onEvent(event, payload);
+      }
+      boundary = buffer.indexOf('\n\n');
+    }
+  }
+}
+
 export function AssistantProvider({ activeId, active, notify, children }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -158,36 +199,73 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     setInput('');
     clear();
     setBusy(true);
+    setMessages((old) => [...old, { role: 'assistant', text: '', reasoning: '', trace: [], streaming: true }]);
+    const updateStreaming = (patch) => setMessages((old) => {
+      const next = [...old];
+      const index = next.length - 1;
+      if (index >= 0 && next[index].role === 'assistant') next[index] = { ...next[index], ...patch };
+      return next;
+    });
+    let finalPayload = null;
     try {
-      const result = await api(`/api/ontologies/${activeId}/agent/chat`, {
-        method: 'POST',
-        body: JSON.stringify({
-          message: text,
-          confirm_action: false,
-          context: {
-            mode: 'assistant',
-            conversation_id: nextConversationId,
-            thinking_mode: thinking,
-            web_search: webSearch,
-            selection,
-            scope: { route: location.pathname, title: document.title, ontology: active?.name },
-          },
-        }),
+      const requestBody = {
+        message: text,
+        confirm_action: false,
+        context: {
+          mode: 'assistant',
+          conversation_id: nextConversationId,
+          thinking_mode: thinking,
+          web_search: webSearch,
+          selection,
+          scope: { route: location.pathname, title: document.title, ontology: active?.name },
+        },
+      };
+      await consumeAgentStream(`/api/ontologies/${activeId}/agent/chat/stream`, requestBody, async (event, payload) => {
+        if (event === 'meta') {
+          if (payload.conversation_id) setConversationId(payload.conversation_id);
+          updateStreaming({ model: payload.model, runMode: payload.run_mode });
+        } else if (event === 'reasoning') {
+          setMessages((old) => {
+            const next = [...old];
+            const index = next.length - 1;
+            if (index >= 0) next[index] = { ...next[index], reasoning: `${next[index].reasoning || ''}${payload.delta || ''}` };
+            return next;
+          });
+        } else if (event === 'answer') {
+          setMessages((old) => {
+            const next = [...old];
+            const index = next.length - 1;
+            if (index >= 0) next[index] = { ...next[index], text: `${next[index].text || ''}${payload.delta || ''}` };
+            return next;
+          });
+        } else if (event === 'done') {
+          finalPayload = payload;
+        } else if (event === 'error') {
+          throw new Error(payload.message || '模型流式调用失败');
+        }
       });
-      setMessages((old) => [...old, {
-        role: 'assistant',
-        text: result.answer,
-        trace: result.trace || [],
-        runMode: result.run_mode,
-        proposal: result.action_proposal,
-        scenarioDiscovery: result.scenario_discovery,
-        reasoning: result.reasoning || '',
-        model: result.model || '',
-        usage: result.usage || null,
-      }]);
+      if (!finalPayload) throw new Error('模型流式响应中断');
+      updateStreaming({
+        text: finalPayload.answer || '',
+        trace: finalPayload.trace || [],
+        runMode: finalPayload.run_mode,
+        proposal: finalPayload.action_proposal,
+        scenarioDiscovery: finalPayload.scenario_discovery,
+        reasoning: finalPayload.reasoning || '',
+        model: finalPayload.model || '',
+        usage: finalPayload.usage || null,
+        streaming: false,
+      });
       setRevision((value) => value + 1);
     } catch (error) {
-      setMessages((old) => [...old, { role: 'assistant', text: `请求失败：${error.message}`, error: true }]);
+      setMessages((old) => {
+        const next = [...old];
+        const index = next.length - 1;
+        if (index >= 0 && next[index].role === 'assistant') {
+          next[index] = { ...next[index], streaming: false, error: true, text: `${next[index].text || ''}${next[index].text ? '\n\n' : ''}请求失败：${error.message}` };
+        }
+        return next;
+      });
     } finally {
       setBusy(false);
     }
