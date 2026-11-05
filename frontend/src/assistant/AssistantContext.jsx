@@ -2,6 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { resourceKey } from './selection';
+import { buildConversationShareImage } from './shareConversation';
+import ConversationShareModal from './ConversationShareModal';
 
 const AssistantContext = createContext(null);
 export const useAssistant = () => useContext(AssistantContext);
@@ -74,6 +76,10 @@ export function AssistantProvider({ activeId, active, notify, children }) {
   const [hydrated, setHydrated] = useState(false);
   const [hydrating, setHydrating] = useState(false);
   const [sessionLabel, setSessionLabel] = useState('新对话');
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareImage, setShareImage] = useState(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareTruncated, setShareTruncated] = useState(false);
   const hydrationRef = useRef(0);
   const itemsRef = useRef([]);
   const pickedEls = useRef(new Map());
@@ -348,6 +354,35 @@ export function AssistantProvider({ activeId, active, notify, children }) {
     }
   }, [activeId, hydrated, hydrating, loadConversation]);
 
+  const openShare = useCallback(async () => {
+    if (!messages.some((message) => message.role === 'user')) {
+      notify?.('先完成一轮对话，再分享为图片。');
+      return;
+    }
+    setShareOpen(true);
+    setShareImage(null);
+    setShareTruncated(false);
+    setShareBusy(true);
+    try {
+      const image = await buildConversationShareImage({ messages, ontologyName: active?.name || '', sessionLabel });
+      setShareImage(image);
+      setShareTruncated(Boolean(image.truncated));
+    } catch (error) {
+      notify?.(`生成分享图片失败：${error.message}`);
+    } finally {
+      setShareBusy(false);
+    }
+  }, [active?.name, messages, notify, sessionLabel]);
+
+  const downloadShareImage = useCallback(() => {
+    if (!shareImage?.dataUrl) return;
+    const link = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    link.href = shareImage.dataUrl;
+    link.download = `本体智能对话-${stamp}.png`;
+    link.click();
+  }, [shareImage]);
+
   const expand = useCallback(() => {
     setReturnTo(location.pathname);
     setOpen(false);
@@ -364,9 +399,9 @@ export function AssistantProvider({ activeId, active, notify, children }) {
   const value = useMemo(() => ({
     activeId, active, open, setOpen, picking, items, messages, input, setInput, busy,
     conversationId, thinking, setThinking, webSearch, setWebSearch, revision, hydrated, hydrating, sessionLabel,
-    startPicking, stopPicking, togglePicking, pick, remove, clear, send, openWith, openAssistant, expand, collapse,
+    startPicking, stopPicking, togglePicking, pick, remove, clear, send, openWith, openAssistant, expand, collapse, openShare,
     newConversation, loadConversation, replaceItems,
   }), [active, activeId, busy, clear, collapse, conversationId, expand, hydrated, hydrating, input, items, loadConversation, messages, newConversation, open, openAssistant, openWith, pick, picking, remove, replaceItems, revision, send, sessionLabel, startPicking, stopPicking, thinking, togglePicking, webSearch]);
 
-  return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
+  return <AssistantContext.Provider value={value}>{children}<ConversationShareModal open={shareOpen} image={shareImage} busy={shareBusy} truncated={shareTruncated} onClose={() => setShareOpen(false)} onDownload={downloadShareImage} /></AssistantContext.Provider>;
 }

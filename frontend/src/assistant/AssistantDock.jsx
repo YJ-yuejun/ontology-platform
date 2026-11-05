@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Bot, History, LoaderCircle, Maximize2, Minimize2, Plus, Scan, Search, X } from 'lucide-react';
+import { Bot, History, LoaderCircle, Maximize2, Minimize2, Plus, Scan, Search, Share2, X } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { api, formatTime } from '../api';
 import AssistantChat from './AssistantChat';
@@ -95,6 +95,7 @@ export default function AssistantDock() {
       </div>
       <div className="assistant-panel-actions">
         <button type="button" onClick={() => { setHistoryOpen((value) => !value); }} title="历史对话" aria-label="历史对话" disabled={assistant.busy}><History size={15} /></button>
+        <button type="button" onClick={assistant.openShare} title="分享为图片" aria-label="分享为图片" disabled={assistant.busy || !assistant.messages.some((message) => message.role === 'user')}><Share2 size={15} /></button>
         <button type="button" onClick={startNew} title="新建对话" aria-label="新建对话" disabled={assistant.busy}><Plus size={15} /></button>
         <button type="button" onClick={() => setMaximized((value) => !value)} title={maximized ? '还原小窗' : '放大到 85% 窗口'}>{maximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button>
         <button type="button" onClick={() => { setMaximized(false); assistant.setOpen(false); }} title="收起"><X size={16} /></button>

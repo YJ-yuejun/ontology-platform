@@ -579,3 +579,11 @@ body.ai-picking .vis-network, body.ai-picking .vis-network canvas { cursor: cros
 @media (max-width:800px) {
   .assistant-panel.maximized { top:2vh; left:2vw; width:96vw; height:96vh; }
 }
+
+/* 分享多轮对话为长图 */
+.share-modal-note { margin-right:auto; color:#8a9daa; font-size:9px; }
+.conversation-share-preview { max-height:62vh; overflow:auto; padding:10px; background:#eef3f8; border:1px solid #dbe6ef; border-radius:6px; text-align:center; }
+.conversation-share-preview img { display:block; width:min(100%,820px); height:auto; margin:0 auto; box-shadow:0 8px 24px rgba(20,45,70,.12); border-radius:4px; }
+.conversation-share-loading { min-height:260px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; color:#7b8e9e; }
+.conversation-share-loading strong { color:#4e6a7e; font-size:11px; }
+.conversation-share-loading span { font-size:9px; }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, ArrowUp, Bot, Boxes, CheckCircle2, ChevronRight, ChevronUp, Globe2, History,
-  LoaderCircle, MessageSquareText, Plus, Scan, Search, ShieldCheck, Sparkles, User, X,
+  LoaderCircle, MessageSquareText, Plus, Scan, Search, Share2, ShieldCheck, Sparkles, User, X,
 } from 'lucide-react';
 import { api, formatTime } from '../api';
 import { useAssistant } from './AssistantContext';
@@ -115,6 +115,7 @@ export default function AssistantPage() {
       <div className="agent-console-identity"><i><Bot size={19} /></i><div><strong>本体智能</strong><small><b /> {active?.name || '未选择本体'} · 选中资源后提问，或直接问当前本体</small></div></div>
       <div className="agent-console-actions">
         <button type="button" onClick={openHistory}><History size={15} /> 历史对话 <em>{conversations.length}</em></button>
+        <button type="button" onClick={assistant.openShare} disabled={busy || !messages.some((message) => message.role === 'user')}><Share2 size={15} /> 分享</button>
         <button type="button" onClick={newConversation} disabled={busy}><Plus size={15} /> 新对话</button>
         <button type="button" onClick={assistant.collapse}><ArrowLeft size={15} /> 收起为悬浮窗</button>
       </div>
