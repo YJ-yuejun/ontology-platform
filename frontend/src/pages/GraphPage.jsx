@@ -3,8 +3,8 @@ import { DataSet } from 'vis-data';
 import { Network } from 'vis-network';
 import 'vis-network/styles/vis-network.css';
 import {
-  ArrowRight, Boxes, Check, ChevronDown, Copy, Crosshair, Focus, GitBranch, Image as ImageIcon, KeyRound, Link2, Maximize2, Minimize2,
-  Network as NetworkIcon, PanelRightClose, PanelRightOpen, Pencil, Plus, RefreshCw, Search, Sparkles, Star, Trash2, X, ZoomIn, ZoomOut,
+  ArrowRight, Boxes, Check, ChevronDown, Copy, Crosshair, Focus, GitBranch, Image as ImageIcon, KeyRound, Link2, Maximize2, MessageSquare, Minimize2,
+  Network as NetworkIcon, PanelRightClose, PanelRightOpen, Pencil, Plus, RefreshCw, RotateCcw, Search, Send, Sparkles, Star, Trash2, X, ZoomIn, ZoomOut,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
@@ -67,6 +67,11 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const subjectChipsRef = useRef(null);
   const [neighborsOf, setNeighborsOf] = useState('');
   const [selection, setSelection] = useState(null); // { kind: 'node' | 'edge', id }
+  const [comments, setComments] = useState([]);
+  const [inspectorTab, setInspectorTab] = useState('detail');
+  const [commentBusy, setCommentBusy] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const commentRequestRef = useRef(false);
   const [editor, setEditor] = useState(null); // { kind: 'object' | 'link' | 'copy' | 'property' | 'subject', ... }
   const [removing, setRemoving] = useState(null); // { kind: 'object' | 'link' | 'property' | 'subject', item, ... }
   const [menu, setMenu] = useState(null); // { x, y, kind, id }
@@ -82,16 +87,18 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const graphIconSignature = useRef('');
 
   const load = async () => {
-    const [objects, links, subjects, domains] = await Promise.all([
+    const [objects, links, subjects, domains, commentRows] = await Promise.all([
       api(`/api/ontologies/${activeId}/object-types`), api(`/api/ontologies/${activeId}/link-types`),
       api(`/api/ontologies/${activeId}/subject-domains`), api(`/api/ontologies/${activeId}/business-domains`),
+      api(`/api/ontologies/${activeId}/graph-comments`).catch(() => []),
     ]);
+    setComments(commentRows);
     setData({ ontologyId: activeId, objects, links, subjects, domains });
     return { objects, links };
   };
   useEffect(() => {
     const requestedDomain = searchParams.get('domain') || '';
-    setData(null); setError(''); setSelection(null); setEditor(null); setRemoving(null); setMenu(null); setConnecting(false); setNeighborsOf('');
+    setData(null); setError(''); setSelection(null); setInspectorTab('detail'); setComments([]); setEditor(null); setRemoving(null); setMenu(null); setConnecting(false); setNeighborsOf('');
     setDomainIds(new Set(requestedDomain ? [requestedDomain] : [])); setSubjectFocus(searchParams.get('subject') || ''); setFocusTarget(searchParams.get('focus') || '');
     load().catch((e) => setError(e.message));
   }, [activeId]);
@@ -104,19 +111,31 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const colorOf = (object) => colors.get(object.subject_domain_id) || NEUTRAL_COLOR;
   const scope = useMemo(() => graphScope({ objects, links, domainIds, coreOnly, focusId: neighborsOf, showCross }), [objects, links, domainIds, coreOnly, neighborsOf, showCross]);
 
+  const commentCounts = useMemo(() => {
+    const counts = new Map();
+    comments.filter((comment) => !comment.parent_id && comment.status === 'open').forEach((comment) => {
+      const key = `${comment.target_type}:${comment.target_id}`;
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }, [comments]);
   const nodeItems = useMemo(() => objects.map((object) => {
     const visible = scope.inScope.has(object.id) || scope.context.has(object.id);
     let emphasis = 'normal';
     if (scope.context.has(object.id)) emphasis = 'context';
     else if (subjectFocus) emphasis = subjectKey(object) === subjectFocus ? 'highlight' : 'dim';
-    return nodeVisual(object, { color: colorOf(object), emphasis, hidden: !visible });
-  }), [objects, scope, subjectFocus, colors]);
+    const visual = nodeVisual(object, { color: colorOf(object), emphasis, hidden: !visible });
+    const count = commentCounts.get(`object_type:${object.id}`) || 0;
+    return count ? { ...visual, label: `${visual.label}\n💬 ${count}` } : visual;
+  }), [objects, scope, subjectFocus, colors, commentCounts]);
   const edgeItems = useMemo(() => links.map((link) => {
     const state = scope.edges.get(link.id) || 'hidden';
     const source = objectById.get(link.source_object_type_id); const target = objectById.get(link.target_object_type_id);
     const faded = Boolean(subjectFocus) && !(source && target && subjectKey(source) === subjectFocus && subjectKey(target) === subjectFocus);
-    return edgeVisual(link, { state, faded, showLabels });
-  }), [links, scope, subjectFocus, showLabels, objectById]);
+    const visual = edgeVisual(link, { state, faded, showLabels });
+    const count = commentCounts.get(`link_type:${link.id}`) || 0;
+    return count && showLabels ? { ...visual, label: `${visual.label} · 💬${count}` } : visual;
+  }), [links, scope, subjectFocus, showLabels, objectById, commentCounts]);
   const visualsRef = useRef({ nodeItems, edgeItems });
   visualsRef.current = { nodeItems, edgeItems };
   const graphNodeItemsRef = useRef(nodeItems);
@@ -289,6 +308,74 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
   const selectedObject = selection?.kind === 'node' ? objectById.get(selection.id) : null;
   const selectedLink = selection?.kind === 'edge' ? linkById.get(selection.id) : null;
   const relationsOf = (id) => links.filter((link) => link.source_object_type_id === id || link.target_object_type_id === id);
+  const selectedTarget = selectedObject
+    ? { type: 'object_type', id: selectedObject.id, label: selectedObject.display_name, kind: 'node' }
+    : selectedLink
+      ? { type: 'link_type', id: selectedLink.id, label: selectedLink.display_name, kind: 'edge' }
+      : null;
+  const selectedComments = selectedTarget
+    ? comments.filter((comment) => comment.target_type === selectedTarget.type && comment.target_id === selectedTarget.id)
+    : [];
+  const selectedOpenCount = selectedComments.filter((comment) => !comment.parent_id && comment.status === 'open').length;
+  const openComments = comments.filter((comment) => !comment.parent_id && comment.status === 'open');
+  const openCommentCount = openComments.length;
+
+  useEffect(() => {
+    if (commentRequestRef.current) { commentRequestRef.current = false; return; }
+    setInspectorTab('detail');
+  }, [selection?.kind, selection?.id]);
+
+  const reloadComments = async () => {
+    const rows = await api(`/api/ontologies/${activeId}/graph-comments`);
+    setComments(rows);
+    return rows;
+  };
+  const addComment = async (body, parentId = null) => {
+    if (!selectedTarget || !body.trim()) return;
+    setCommentBusy(true);
+    try {
+      await api(`/api/ontologies/${activeId}/graph-comments`, {
+        method: 'POST',
+        body: JSON.stringify({ target_type: selectedTarget.type, target_id: selectedTarget.id, target_label: selectedTarget.label, body, parent_id: parentId }),
+      });
+      await reloadComments();
+      notify('评论已添加');
+    } catch (cause) {
+      notify(cause.message);
+      throw cause;
+    } finally {
+      setCommentBusy(false);
+    }
+  };
+  const setCommentStatus = async (commentId, status) => {
+    setCommentBusy(true);
+    try {
+      await api(`/api/graph-comments/${commentId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      await reloadComments();
+      notify(status === 'resolved' ? '评论已解决' : '评论已重新打开');
+    } catch (cause) {
+      notify(cause.message);
+    } finally {
+      setCommentBusy(false);
+    }
+  };
+  const openCommentsFor = (kind, item) => {
+    commentRequestRef.current = true;
+    setMenu(null);
+    setSelection({ kind: kind === 'object' ? 'node' : 'edge', id: item.id });
+    setInspectorTab('comments');
+    setInspectorOpen(true);
+  };
+  const openReviewComment = (comment) => {
+    const kind = comment.target_type === 'object_type' ? 'node' : 'edge';
+    const exists = kind === 'node' ? objectById.has(comment.target_id) : linkById.has(comment.target_id);
+    if (!exists) { notify('该评论的目标资源已不存在'); return; }
+    commentRequestRef.current = true;
+    setReviewOpen(false);
+    setSelection({ kind, id: comment.target_id });
+    setInspectorTab('comments');
+    setInspectorOpen(true);
+  };
 
   const openCreateObject = (position) => {
     pendingPosition.current = position || null;
@@ -528,6 +615,7 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
           {searchOpen && query.trim() && <div className="graph-search-results" role="listbox">{matches.map((item) => <button type="button" key={item.id} role="option" aria-selected="false" onMouseDown={(e) => e.preventDefault()} onClick={() => locate(item.id)}><i style={{ background: colorOf(item).border }} /><span><b>{item.is_core ? '★ ' : ''}{item.display_name}</b><code>{item.name}</code></span><small>{item.subject_domain_name || '未分类'}</small></button>)}{!matches.length && <p>没有匹配的对象</p>}</div>}
         </div>
         <div className="graph-tool-group">
+          <button className="btn secondary small graph-review-button" onClick={() => setReviewOpen(true)}><MessageSquare size={14} /> 审核评论{openCommentCount > 0 && <em>{openCommentCount}</em>}</button>
           <button className="btn primary small" onClick={() => openCreateObject()}><Plus size={14} /> 新建对象</button>
           <button className={`btn small ${connecting ? 'primary' : 'secondary'}`} disabled={objects.length < 1} onClick={() => setConnecting((value) => !value)} title="从一个对象拖到另一个对象即可新建关系（快捷键 L）"><Link2 size={14} /> {connecting ? '连线中…' : '连线建关系'}</button>
         </div>
@@ -570,10 +658,11 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
         {(neighborsObject || connecting) && <div className="graph-banner">{connecting ? <><Link2 size={14} /><span>连线模式：按住起点对象拖到终点对象，松开后填写关系信息。</span><button type="button" onClick={() => setConnecting(false)}>退出（Esc）</button></> : <><Crosshair size={14} /><span>正在查看“{neighborsObject.display_name}”及其直接关联的 {Math.max(0, scope.inScope.size - 1)} 个对象</span><button type="button" onClick={() => setNeighborsOf('')}>返回全图</button></>}</div>}
         {!objects.length && <div className="graph-empty"><NetworkIcon size={34} /><strong>还没有对象类型</strong><span>新建第一个对象后，本体图谱会在这里生成。也可以双击画布空白处直接新建。</span><button className="btn primary small" onClick={() => openCreateObject()}><Plus size={14} /> 新建对象类型</button></div>}
         {objects.length > 0 && !scope.inScope.size && <div className="graph-empty soft"><Boxes size={30} /><strong>当前过滤条件下没有对象</strong><button className="btn secondary small" onClick={() => { setDomainIds(new Set()); setCoreOnly(false); setNeighborsOf(''); }}>清除过滤</button></div>}
-        {objects.length > 0 && <div className="graph-hint">单击查看 · 双击编辑 · 右键更多操作 / 问 AI · 双击空白处新建对象 · Delete 删除选中项</div>}
+        {objects.length > 0 && <div className="graph-hint">单击查看 · 双击编辑 · 右键评论 / 问 AI / 更多操作 · 💬 为未解决评论</div>}
         {menu && <div className="graph-context-menu" role="menu" style={{ left: menu.x, top: menu.y }} onContextMenu={(e) => e.preventDefault()}>
           {menuObject && <><header>{menuObject.display_name}</header>
             <button role="menuitem" className="ai" onClick={menuAction(() => askGraphAI('object', menuObject))}><Sparkles size={14} /> 问 AI <small>带入当前对象</small></button>
+            <button role="menuitem" onClick={menuAction(() => openCommentsFor('object', menuObject))}><MessageSquare size={14} /> {commentCounts.get(`object_type:${menuObject.id}`) ? `查看评论 ${commentCounts.get(`object_type:${menuObject.id}`)}` : '添加评论'}<small>人工检查 / 审核</small></button>
             <button role="menuitem" onClick={menuAction(() => editObject(menuObject))}><Pencil size={14} /> 编辑对象</button>
             <button role="menuitem" onClick={menuAction(() => copyObject(menuObject))}><Copy size={14} /> 复制对象…<kbd>⌘D</kbd></button>
             <button role="menuitem" onClick={menuAction(() => openCreateLink({ source_object_type_id: menuObject.id }))}><Link2 size={14} /> 从此对象新建关系</button>
@@ -583,6 +672,7 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
             <hr /><button role="menuitem" className="danger" onClick={menuAction(() => setRemoving({ kind: 'object', item: menuObject }))}><Trash2 size={14} /> 删除对象</button></>}
           {menuLink && <><header>{menuLink.display_name}</header>
             <button role="menuitem" className="ai" onClick={menuAction(() => askGraphAI('link', menuLink))}><Sparkles size={14} /> 问 AI <small>带入当前关系</small></button>
+            <button role="menuitem" onClick={menuAction(() => openCommentsFor('link', menuLink))}><MessageSquare size={14} /> {commentCounts.get(`link_type:${menuLink.id}`) ? `查看评论 ${commentCounts.get(`link_type:${menuLink.id}`)}` : '添加评论'}<small>人工检查 / 审核</small></button>
             <button role="menuitem" onClick={menuAction(() => editLink(menuLink))}><Pencil size={14} /> 编辑关系</button>
             <button role="menuitem" onClick={menuAction(() => copyLink(menuLink))}><Copy size={14} /> 复制关系…<kbd>⌘D</kbd></button>
             <button role="menuitem" onClick={menuAction(() => locate(menuLink.source_object_type_id))}><ArrowRight size={14} /> 定位起点“{menuLink.source_display_name}”</button>
@@ -598,11 +688,16 @@ export default function GraphPage({ activeId, active, refreshOntologies, notify 
       </div>
     </section>
     {inspectorOpen && <aside className="inspector">
-      <div className="inspector-title"><NetworkIcon size={18} /><div><h3>本体检查器</h3><p>选中对象或关系后可直接编辑、删除</p></div>{selection && <button className="icon-btn" onClick={() => setSelection(null)} aria-label="取消选择" title="取消选择"><X size={15} /></button>}<button className="icon-btn inspector-collapse" onClick={() => setInspectorOpen(false)} aria-label="收起检查器" title="收起检查器"><PanelRightClose size={15} /></button></div>
-      {selectedObject ? <ObjectInspector object={selectedObject} color={colorOf(selectedObject)} relations={relationsOf(selectedObject.id)} onEdit={() => editObject(selectedObject)} onCopy={() => copyObject(selectedObject)} onRemove={() => setRemoving({ kind: 'object', item: selectedObject })} onToggleCore={() => toggleCore(selectedObject)} onNeighbors={() => showNeighbors(selectedObject.id)} onAddLink={() => openCreateLink({ source_object_type_id: selectedObject.id })} onSelectLink={(id) => setSelection({ kind: 'edge', id })} onEditLink={(id) => editLink(linkById.get(id))} onRemoveLink={(id) => setRemoving({ kind: 'link', item: linkById.get(id) })} onEditProperty={(key) => editProperty(selectedObject, 'object', key)} onRemoveProperty={(key) => removeProperty(selectedObject, 'object', key)} onAddProperty={() => editProperty(selectedObject, 'object')} onOpenList={() => navigate('/ontology/model/object-types')} onAskAI={() => askGraphAI('object', selectedObject)} />
+      <div className="inspector-title"><NetworkIcon size={18} /><div><h3>本体检查器</h3><p>选中对象或关系后可直接编辑、评论</p></div>{selection && <button className="icon-btn" onClick={() => setSelection(null)} aria-label="取消选择" title="取消选择"><X size={15} /></button>}<button className="icon-btn inspector-collapse" onClick={() => setInspectorOpen(false)} aria-label="收起检查器" title="收起检查器"><PanelRightClose size={15} /></button></div>
+      {selectedTarget && <div className="inspector-tabs"><button type="button" className={inspectorTab === 'detail' ? 'active' : ''} onClick={() => setInspectorTab('detail')}>详情</button><button type="button" className={inspectorTab === 'comments' ? 'active' : ''} onClick={() => setInspectorTab('comments')}><MessageSquare size={12} /> 评论 {selectedOpenCount > 0 && <em>{selectedOpenCount}</em>}</button></div>}
+      {selectedTarget && inspectorTab === 'comments' ? <GraphCommentsPanel target={selectedTarget} comments={selectedComments} busy={commentBusy} onAdd={addComment} onStatus={setCommentStatus} /> : selectedObject ? <ObjectInspector object={selectedObject} color={colorOf(selectedObject)} relations={relationsOf(selectedObject.id)} onEdit={() => editObject(selectedObject)} onCopy={() => copyObject(selectedObject)} onRemove={() => setRemoving({ kind: 'object', item: selectedObject })} onToggleCore={() => toggleCore(selectedObject)} onNeighbors={() => showNeighbors(selectedObject.id)} onAddLink={() => openCreateLink({ source_object_type_id: selectedObject.id })} onSelectLink={(id) => setSelection({ kind: 'edge', id })} onEditLink={(id) => editLink(linkById.get(id))} onRemoveLink={(id) => setRemoving({ kind: 'link', item: linkById.get(id) })} onEditProperty={(key) => editProperty(selectedObject, 'object', key)} onRemoveProperty={(key) => removeProperty(selectedObject, 'object', key)} onAddProperty={() => editProperty(selectedObject, 'object')} onOpenList={() => navigate('/ontology/model/object-types')} onAskAI={() => askGraphAI('object', selectedObject)} />
         : selectedLink ? <LinkInspector link={selectedLink} onEdit={() => editLink(selectedLink)} onCopy={() => copyLink(selectedLink)} onRemove={() => setRemoving({ kind: 'link', item: selectedLink })} onLocate={locate} onEditObject={(id) => editObject(objectById.get(id))} onEditProperty={(key) => editProperty(selectedLink, 'link', key)} onRemoveProperty={(key) => removeProperty(selectedLink, 'link', key)} onAddProperty={() => editProperty(selectedLink, 'link')} onAskAI={() => askGraphAI('link', selectedLink)} />
           : <OverviewInspector stats={stats} subjects={visibleSubjects} subjectFocus={subjectFocus} onSubject={(id) => setSubjectFocus(subjectFocus === id ? '' : id)} onEditSubject={(id) => setEditor({ kind: 'subject', item: subjectById(id) })} onRemoveSubject={(id) => setRemoving({ kind: 'subject', item: subjectById(id) })} coreObjects={objects.filter((item) => item.is_core && scope.inScope.has(item.id))} onLocate={locate} onEditObject={(id) => editObject(objectById.get(id))} onUncore={(id) => toggleCore(objectById.get(id))} onCreate={() => openCreateObject()} />}
     </aside>}
+    {reviewOpen && <Modal wide title="图谱审核评论" subtitle={`当前本体共有 ${openCommentCount} 条未解决评论；点击评论可定位对象或关系。`} onClose={() => setReviewOpen(false)} footer={<button type="button" className="btn secondary" onClick={() => setReviewOpen(false)}>关闭</button>}>
+      <div className="graph-review-list">{openComments.length ? openComments.slice().reverse().map((comment) => <button type="button" key={comment.id} onClick={() => openReviewComment(comment)}><span className={`graph-review-type ${comment.target_type}`}>{comment.target_type === 'object_type' ? '对象' : '关系'}</span><span><b>{comment.target_label}</b><p>{comment.body}</p><small>{comment.author} · {commentTime(comment.created_at)}</small></span><ArrowRight size={14} /></button>) : <div className="graph-review-empty"><MessageSquare size={26} /><strong>没有未解决评论</strong><span>右键对象或关系，选择“添加评论”。</span></div>}</div>
+    </Modal>}
+
     {editor?.kind === 'object' && <ObjectTypeEditor activeId={activeId} editing={editor.item || null} initial={editor.initial} notify={notify} onClose={() => { pendingPosition.current = null; setEditor(null); }} onSaved={afterObjectSaved} />}
     {editor?.kind === 'link' && <LinkTypeEditor activeId={activeId} objects={objects} editing={editor.item || null} initial={editor.initial} copyFrom={editor.copyFrom} notify={notify} onClose={() => setEditor(null)} onSaved={afterLinkSaved} />}
     {editor?.kind === 'copy' && <ObjectCopyDialog activeId={activeId} source={editor.item} objects={objects} links={links} notify={notify} onClose={() => setEditor(null)} onCopied={afterCopied} />}
@@ -679,6 +774,49 @@ function LinkInspector({ link, onEdit, onCopy, onRemove, onLocate, onEditObject,
     <PropertyCards properties={link.properties || []} onEdit={onEditProperty} onRemove={onRemoveProperty} />
     {!(link.properties || []).length && <p className="inspector-note">关系属性用于描述关系本身，例如“签约日期”。可点 + 添加。</p>}
   </div>;
+}
+
+function commentTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function GraphCommentsPanel({ target, comments, busy, onAdd, onStatus }) {
+  const [body, setBody] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
+  const [showResolved, setShowResolved] = useState(false);
+  const roots = comments.filter((comment) => !comment.parent_id);
+  const repliesOf = (rootId) => comments.filter((comment) => comment.parent_id === rootId);
+  const visibleRoots = roots.filter((comment) => showResolved || comment.status === 'open');
+  const resolvedCount = roots.filter((comment) => comment.status === 'resolved').length;
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!body.trim() || !target) return;
+    try {
+      await onAdd(body, replyTo?.id || null);
+      setBody('');
+      setReplyTo(null);
+    } catch { /* 错误已由上层提示 */ }
+  };
+  return <section className="graph-comments-panel">
+    <header className="graph-comments-head"><div><strong>审核评论</strong><span>{target?.label} · {roots.filter((item) => item.status === 'open').length} 条未解决</span></div>{resolvedCount > 0 && <button type="button" onClick={() => setShowResolved((value) => !value)}>{showResolved ? '隐藏已解决' : `显示已解决 ${resolvedCount}`}</button>}</header>
+    <div className="graph-comments-list">
+      {visibleRoots.map((root) => <article key={root.id} className={`graph-comment-thread ${root.status}`}>
+        <header><b>{root.author}</b><time>{commentTime(root.created_at)}</time>{root.status === 'resolved' ? <button type="button" className="reopen" onClick={() => onStatus(root.id, 'open')} disabled={busy}><RotateCcw size={11} /> 重新打开</button> : <button type="button" onClick={() => onStatus(root.id, 'resolved')} disabled={busy}><Check size={11} /> 解决</button>}</header>
+        <p>{root.body}</p>
+        {repliesOf(root.id).map((reply) => <div className="graph-comment-reply" key={reply.id}><header><b>{reply.author}</b><time>{commentTime(reply.created_at)}</time></header><p>{reply.body}</p></div>)}
+        {root.status === 'open' && <button type="button" className="reply-btn" onClick={() => { setReplyTo(root); setBody(''); }}><MessageSquare size={11} /> 回复</button>}
+      </article>)}
+      {!visibleRoots.length && <div className="graph-comments-empty"><MessageSquare size={22} /><strong>{roots.length ? '当前没有未解决评论' : '还没有审核评论'}</strong><span>在对象或关系上右键，选择“添加评论”。</span></div>}
+    </div>
+    <form className="graph-comment-composer" onSubmit={submit}>
+      {replyTo && <div className="graph-comment-reply-to">回复 {replyTo.author}<button type="button" onClick={() => { setReplyTo(null); setBody(''); }}>取消</button></div>}
+      <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder={replyTo ? `回复 ${replyTo.author}…` : '写下检查意见、疑问或审核结论…'} rows={3} maxLength={2000} />
+      <footer><span>{body.length} / 2000</span><button type="submit" disabled={!body.trim() || busy}><Send size={13} /> {busy ? '提交中…' : '提交评论'}</button></footer>
+    </form>
+  </section>;
 }
 
 function OverviewInspector({ stats, subjects, subjectFocus, onSubject, onEditSubject, onRemoveSubject, coreObjects, onLocate, onEditObject, onUncore, onCreate }) {

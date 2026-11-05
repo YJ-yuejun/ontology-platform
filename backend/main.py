@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 import re
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, Field
 
 from fastapi import FastAPI, HTTPException, Query, Request
@@ -53,6 +53,18 @@ app = FastAPI(
     version="1.9.0",
     lifespan=lifespan,
 )
+
+
+class GraphCommentCreate(BaseModel):
+    target_type: Literal["object_type", "link_type"]
+    target_id: str = Field(min_length=1)
+    target_label: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=2000)
+    parent_id: Optional[str] = None
+
+
+class GraphCommentUpdate(BaseModel):
+    status: Literal["open", "resolved"]
 
 
 class VersionCompareRequest(BaseModel):
@@ -717,6 +729,21 @@ def upload_evidence(ontology_id: str, data: EvidenceUpload):
 @app.delete("/api/evidence/{source_id}", status_code=204)
 def delete_evidence(source_id: str):
     enterprise.delete_evidence(source_id)
+
+
+@app.get("/api/ontologies/{ontology_id}/graph-comments")
+def list_graph_comments(ontology_id: str, target_type: Optional[str] = None, target_id: Optional[str] = None, status: Optional[str] = None):
+    return repo.list_graph_comments(ontology_id, target_type, target_id, status)
+
+
+@app.post("/api/ontologies/{ontology_id}/graph-comments", status_code=201)
+def create_graph_comment(ontology_id: str, data: GraphCommentCreate):
+    return repo.create_graph_comment(ontology_id, data.model_dump())
+
+
+@app.patch("/api/graph-comments/{comment_id}")
+def update_graph_comment(comment_id: str, data: GraphCommentUpdate):
+    return repo.update_graph_comment(comment_id, data.status)
 
 
 @app.post("/api/ontologies/{ontology_id}/ai/analyze", status_code=201)

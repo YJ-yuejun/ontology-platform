@@ -219,6 +219,24 @@ def init_db() -> None:
           change_note TEXT,
           FOREIGN KEY(ontology_id) REFERENCES ontologies(id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS graph_comments (
+          id TEXT PRIMARY KEY,
+          ontology_id TEXT NOT NULL,
+          target_type TEXT NOT NULL,
+          target_id TEXT NOT NULL,
+          target_label TEXT NOT NULL,
+          parent_id TEXT,
+          body TEXT NOT NULL,
+          author TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open',
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          resolved_at TEXT,
+          resolved_by TEXT,
+          FOREIGN KEY(ontology_id) REFERENCES ontologies(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_graph_comments_target ON graph_comments(ontology_id, target_type, target_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_graph_comments_status ON graph_comments(ontology_id, status, created_at);
         CREATE TABLE IF NOT EXISTS shared_properties (
           id TEXT PRIMARY KEY,
           ontology_id TEXT NOT NULL,
@@ -1155,6 +1173,102 @@ def delete_interface(component_id: str) -> None:
     if current["status"] == "active": conn.close(); raise ValidationError("已发布接口不能直接删除")
     conn.execute("DELETE FROM interfaces WHERE id=?",(component_id,)); _log(conn,current["ontology_id"],"interface",component_id,"delete",f"删除接口 {current['display_name']}",before=current); conn.commit(); conn.close()
 
+
+def list_graph_comments(ontology_id: str, target_type: Optional[str] = None,
+                        target_id: Optional[str] = None, status: Optional[str] = None) -> list[Dict[str, Any]]:
+    """Return review comments for a graph, oldest first; replies share the root target."""
+    get_ontology(ontology_id)
+    clauses = ["ontology_id=?"]
+    values: list[Any] = [ontology_id]
+    if target_type:
+        clauses.append("target_type=?")
+        values.append(target_type)
+    if target_id:
+        clauses.append("target_id=?")
+        values.append(target_id)
+    if status:
+        clauses.append("status=?")
+        values.append(status)
+    conn = get_conn()
+    rows = conn.execute(
+        f"SELECT * FROM graph_comments WHERE {' AND '.join(clauses)} ORDER BY created_at ASC",
+        values,
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def create_graph_comment(ontology_id: str, data: Dict[str, Any], author: str = "admin") -> Dict[str, Any]:
+    """Anchor a comment to an object or relation in the current ontology."""
+    get_ontology(ontology_id)
+    target_type = str(data.get("target_type") or "")
+    if target_type not in {"object_type", "link_type"}:
+        raise ValidationError("评论目标必须是对象或关系")
+    target_id = str(data.get("target_id") or "")
+    target_label = str(data.get("target_label") or "").strip()
+    body = str(data.get("body") or "").strip()
+    if not target_id or not target_label:
+        raise ValidationError("评论缺少目标资源")
+    if not body:
+        raise ValidationError("评论内容不能为空")
+    if len(body) > 2000:
+        raise ValidationError("评论不能超过 2000 字")
+    table = "object_types" if target_type == "object_type" else "link_types"
+    conn = get_conn()
+    target = conn.execute(
+        f"SELECT id, display_name FROM {table} WHERE id=? AND ontology_id=?",
+        (target_id, ontology_id),
+    ).fetchone()
+    if not target:
+        conn.close()
+        raise NotFoundError("评论目标不存在")
+    parent_id = data.get("parent_id") or None
+    root_id = None
+    if parent_id:
+        parent = conn.execute("SELECT * FROM graph_comments WHERE id=? AND ontology_id=?", (parent_id, ontology_id)).fetchone()
+        if not parent:
+            conn.close()
+            raise NotFoundError("回复的评论不存在")
+        if parent["target_type"] != target_type or parent["target_id"] != target_id:
+            conn.close()
+            raise ValidationError("回复必须属于同一条资源评论")
+        root_id = parent["parent_id"] or parent["id"]
+    stamp = now()
+    comment_id = str(uuid.uuid4())
+    conn.execute(
+        """INSERT INTO graph_comments
+           (id,ontology_id,target_type,target_id,target_label,parent_id,body,author,status,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        (comment_id, ontology_id, target_type, target_id, target_label, parent_id, body, author, "open", stamp, stamp),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM graph_comments WHERE id=?", (comment_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def update_graph_comment(comment_id: str, status: str, actor: str = "admin") -> Dict[str, Any]:
+    if status not in {"open", "resolved"}:
+        raise ValidationError("评论状态只能是 open 或 resolved")
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM graph_comments WHERE id=?", (comment_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise NotFoundError("评论不存在")
+    if row["parent_id"]:
+        conn.close()
+        raise ValidationError("请对评论线程主贴执行解决/重新打开")
+    stamp = now()
+    resolved_at = stamp if status == "resolved" else None
+    resolved_by = actor if status == "resolved" else None
+    conn.execute(
+        "UPDATE graph_comments SET status=?, updated_at=?, resolved_at=?, resolved_by=? WHERE id=?",
+        (status, stamp, resolved_at, resolved_by, comment_id),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM graph_comments WHERE id=?", (comment_id,)).fetchone()
+    conn.close()
+    return dict(row)
 
 def _row_business_domain(row: sqlite3.Row) -> Dict[str, Any]:
     return dict(row)
